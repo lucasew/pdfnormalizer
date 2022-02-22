@@ -1,0 +1,11 @@
+#!/usr/bin/env nix-shell
+#! nix-shell -i bash -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.numpy python3Packages.opencv4 python3Packages.screeninfo
+# vim:ft=bash
+
+export THIS_DIR="$(realpath "$(dirname "$0")")"
+
+export PYTHONPATH="$PYTHONPATH:$THIS_DIR"
+
+export _COMMAND=$1;shift
+
+python -c "from pdfnormalizer.$_COMMAND import main; main()" "$@"
