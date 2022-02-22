@@ -14,20 +14,34 @@ def array_to_data(array):
 class GUIWithImageTransformer():
     scale = 1.0
     page = 0
-    layout = [
-        [
-            sg.Button("<", key = 'prev'),
-            sg.Button("+", key = 'more_zoom'),
-            sg.Button("X"),
-            sg.Button("-", key = 'less_zoom'),
-            sg.Button(">", key = 'next'),
-            sg.Text(key = 'label')
-        ],
-        [
-            sg.Image(key = 'img'),
-            sg.Image(key = 'img2'),
-        ]
+    buttonbar = [
+        sg.Button("<", key = 'prev'),
+        sg.Button("+", key = 'more_zoom'),
+        sg.Button("X"),
+        sg.Button("-", key = 'less_zoom'),
+        sg.Button(">", key = 'next'),
+        sg.Text(key = 'label')
     ]
+
+    def _get_button_bar(self):
+        buttons = []
+        try:
+            super_buttons = super()._get_button_bar()
+            for button in super_buttons:
+                buttons.append(button)
+        except AttributeError:
+            pass
+        for button in self.buttonbar:
+            buttons.append(button)
+        return buttons
+
+    @property
+    def layout(self):
+        buttonbar = self._get_button_bar()
+        return [
+            buttonbar,
+            [ sg.Image(key = 'img'), sg.Image(key = 'img2') ]
+        ]
 
     def __init__(self, images = [], start_page = 0, scale = 1.0):
         import numpy as np
