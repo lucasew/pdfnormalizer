@@ -5,7 +5,10 @@ import PySimpleGUI as sg
 import numpy as np
 import cv2
 from screeninfo import get_monitors, Enumerator
-from pdfnormalizer.utils import array_to_data, GUIWithImageTransformer
+from pdfnormalizer.utils import array_to_data, GUI, GUIHandler
+
+class CustomGUIHandler(GUIHandler):
+    pass
 
 def main():
     parser = ArgumentParser()
@@ -22,6 +25,6 @@ def main():
 
     if page < 0 or page >= qt_images:
         raise Exception(f"Invalid page: {page + 1}")
-
-    gui = GUIWithImageTransformer(images, start_page = page, scale = scale)
+    handler = CustomGUIHandler(scale = scale, page = page)
+    gui = GUI(images, handler)
     gui.run()
