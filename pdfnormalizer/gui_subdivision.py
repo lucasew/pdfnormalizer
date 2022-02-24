@@ -16,9 +16,8 @@ class CustomGUIHandler(GUIHandler):
         self.ty = 0.006
         self.show_subdivision = True
         self.black_emptyspace = True
+        self.max_depth = 1
     def subdivide(self, img, depthmap = None, depth = 1, bg_color = None, x = 0, y = 0, sx = None, sy = None, horizontal = False):
-        if depth > 50:
-            return depthmap
         (w, h, *rest) = img.shape
         if sx is None or sy is None:
             sx = w
@@ -67,8 +66,10 @@ class CustomGUIHandler(GUIHandler):
                 sx -= 1
                 continue
             break
-        print("nivel", depth, x, sx, y, sy)
-        depthmap[x:x+sx, y:y+sy] = depth * 5
+        # print("nivel", depth, x, sx, y, sy)
+        depthmap[x:x+sx, y:y+sy] = int((depth * 255) / self.max_depth)
+        if depth > self.max_depth:
+            return depthmap
         if not horizontal:
             if sx < min_gap_x:
                 return depthmap
@@ -101,7 +102,7 @@ class CustomGUIHandler(GUIHandler):
                             biggest_gap = current_gap
                     else:
                         current_gap = 0
-            print('biggest_gap', biggest_gap, 'min', min_gap_x, min_gap_y)
+            # print('biggest_gap', biggest_gap, 'min', min_gap_x, min_gap_y)
             biggest_gap = int(3*(biggest_gap / 4))
             if not horizontal:
                 if biggest_gap < min_gap_x:
@@ -159,7 +160,7 @@ class CustomGUIHandler(GUIHandler):
                             sections.append(i)
                             current_gap = 0
                 sections.append(x + sx)
-            print('sections', sections)
+            # print('sections', sections)
             if len(sections) >= 2:
                 dmap = depthmap
                 for i in range(len(sections) - 1):
@@ -221,27 +222,40 @@ class CustomGUIHandler(GUIHandler):
             return mask
         else:
             subdivided = self.subdivide(mask)
+            max_value = np.max(subdivided)
+            print(max_value)
+            subdivided = np.array(subdivided * (255 / max_value), np.uint8)
+            print(np.max(subdivided))
             return subdivided
 
     def handle_tx_up(self, gui, value):
-        if self.tx <= 1 and self.tx >= 0:
+        if self.tx < 1:
             self.tx += 0.01
             gui.emit('tick')
     def handle_tx_down(self, gui, value):
-        if self.tx < 1 and self.tx > 0:
+        if self.tx > 0:
             self.tx -= 0.001
             gui.emit('tick')
     def handle_ty_up(self, gui, value):
-        if self.ty <= 1 and self.ty >= 0:
+        if self.ty <= 1:
             self.ty += 0.01
             gui.emit('tick')
     def handle_ty_down(self, gui, value):
-        if self.ty < 1 and self.ty > 0:
+        if self.ty > 0:
             self.ty -= 0.001
             gui.emit('tick')
+    def handle_max_depth_up(self, gui, value):
+        if self.max_depth < 50:
+            self.max_depth += 1
+            gui.emit('tick')
+    def handle_max_depth_down(self, gui, value):
+        if self.max_depth > 1:
+            self.max_depth -= 1
+            gui.emit('tick')
+
     def handle_tick(self, gui, value):
         super().handle_tick(gui, value)
-        gui.window['threshold'].update(value = f'tx: {self.tx:.4f} ty: {self.ty:.4f}')
+        gui.window['status'].update(value = f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
     def handle_toggle_view(self, gui, value):
         self.show_subdivision = not self.show_subdivision
         gui.emit('tick')
@@ -259,7 +273,9 @@ class CustomGUIHandler(GUIHandler):
             sg.Button('ty+', key = 'ty_up'),
             sg.Button('tg', key = 'toggle_view'),
             sg.Button('tbe', key = 'toggle_black_emptyspace'),
-            sg.Text(key = 'threshold')
+            sg.Button('d+', key = 'max_depth_up'),
+            sg.Button('d-', key = 'max_depth_down'),
+            sg.Text(key = 'status')
         ]
 
 def main():
