@@ -89,16 +89,20 @@ class GUI():
         self.emit('tick')
     def emit(self, name = 'tick', value = None):
         self.window.write_event_value(name, value)
+    def tick(self, timeout = None):
+        event, values = self.window.read(timeout = timeout)
+        handler = None
+        try:
+            handler = self.handler.__getattribute__(f'handle_{event}')
+            ret = handler(self, values)
+            if ret is not None:
+                return False
+        except AttributeError:
+            pass
+        print("GUI event: ", event, handler is not None, values)
+        return True
+
     def run(self):
-        while True:
-            event, values = self.window.read()
-            handler = None
-            try:
-                handler = self.handler.__getattribute__(f'handle_{event}')
-                ret = handler(self, values)
-                if ret is not None:
-                    break
-            except AttributeError:
-                pass
-            print("GUI event: ", event, handler is not None, values)
+        while self.tick():
+            pass
         self.window.close()
