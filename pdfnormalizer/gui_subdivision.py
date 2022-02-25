@@ -16,6 +16,7 @@ class CustomGUIHandler(GUIHandler):
         self.ty = 0.006
         self.show_subdivision = True
         self.black_emptyspace = True
+        self.only_last_level = False
         self.max_depth = 1
     def subdivide(self, img, depthmap = None, depth = 1, bg_color = None, x = 0, y = 0, sx = None, sy = None, horizontal = False):
         (w, h, *rest) = img.shape
@@ -67,8 +68,11 @@ class CustomGUIHandler(GUIHandler):
                 continue
             break
         # print("nivel", depth, x, sx, y, sy)
-        depthmap[x:x+sx, y:y+sy] = int((depth * 255) / self.max_depth)
+        if not self.only_last_level:
+            depthmap[x:x+sx, y:y+sy] = int((depth * 255) / self.max_depth)
         if depth > self.max_depth:
+            if self.only_last_level:
+                depthmap[x:x+sx, y:y+sy] = 255
             return depthmap
         if not horizontal:
             if sx < min_gap_x:
@@ -161,48 +165,34 @@ class CustomGUIHandler(GUIHandler):
                             current_gap = 0
                 sections.append(x + sx)
             # print('sections', sections)
-            if len(sections) >= 2:
-                dmap = depthmap
-                for i in range(len(sections) - 1):
-                    a = sections[i]
-                    b = sections[i + 1]
-                    if not horizontal:
-                        dmap = self.subdivide(
-                            img,
-                            depthmap = dmap,
-                            depth = depth + 1,
-                            bg_color = bg_color,
-                            x = x,
-                            y = a,
-                            sx = sx,
-                            sy = b - a,
-                            horizontal = not horizontal
-                        )
-                    else:
-                        dmap = self.subdivide(
-                            img,
-                            depthmap = dmap,
-                            depth = depth + 1,
-                            bg_color = bg_color,
-                            x = a,
-                            y = y,
-                            sx = b - a,
-                            sy = sy,
-                            horizontal = not horizontal
-                        )
-                return dmap
-            else:
-                return self.subdivide(
-                    img,
-                    depthmap = dmap,
-                    depth = depth + 1,
-                    bg_color = bg_color,
-                    x = x,
-                    y = y,
-                    sx = sx,
-                    sy = sy,
-                    horizontal = not horizontal
-                )
+            dmap = depthmap
+            for i in range(len(sections) - 1):
+                a = sections[i]
+                b = sections[i + 1]
+                if not horizontal:
+                    depthmap = self.subdivide(
+                        img,
+                        depthmap = dmap,
+                        depth = depth + 1,
+                        bg_color = bg_color,
+                        x = x,
+                        y = a,
+                        sx = sx,
+                        sy = b - a,
+                        horizontal = not horizontal
+                    )
+                else:
+                    depthmap = self.subdivide(
+                        img,
+                        depthmap = dmap,
+                        depth = depth + 1,
+                        bg_color = bg_color,
+                        x = a,
+                        y = y,
+                        sx = b - a,
+                        sy = sy,
+                        horizontal = not horizontal
+                    )
         return depthmap
 
     def frame_transform(self, img):
@@ -259,6 +249,9 @@ class CustomGUIHandler(GUIHandler):
     def handle_toggle_view(self, gui, value):
         self.show_subdivision = not self.show_subdivision
         gui.emit('tick')
+    def handle_toggle_only_last_level(self, gui, value):
+        self.only_last_level = not self.only_last_level
+        gui.emit('tick')
     def handle_toggle_black_emptyspace(self, gui, value):
         self.black_emptyspace = not self.black_emptyspace
         gui.emit('tick')
@@ -273,6 +266,7 @@ class CustomGUIHandler(GUIHandler):
             sg.Button('ty+', key = 'ty_up'),
             sg.Button('tg', key = 'toggle_view'),
             sg.Button('tbe', key = 'toggle_black_emptyspace'),
+            sg.Button('oll', key = 'toggle_only_last_level'),
             sg.Button('d+', key = 'max_depth_up'),
             sg.Button('d-', key = 'max_depth_down'),
             sg.Text(key = 'status')
