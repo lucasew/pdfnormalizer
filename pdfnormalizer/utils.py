@@ -29,7 +29,9 @@ class GUIHandler():
         w = int(w*norm_scale)
         h = int(h*norm_scale)
 
-        transformed_img = self.frame_transform(img)
+        transformed_img, *orig = self.frame_transform(img)
+        if len(orig) > 0:
+            img = orig[0]
         img = cv2.resize(img, fx = norm_scale, fy = norm_scale, dsize = (w, h))
         transformed_img = cv2.resize(transformed_img, fx = norm_scale, fy = norm_scale, dsize = (w, h))
         gui.window['img'].update(array_to_data(img))

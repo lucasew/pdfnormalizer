@@ -43,18 +43,18 @@ def prepare_page_for_subdivision(img):
     return mask
 
 def get_bounding_boxes(
-    img,                # imagem de entrada
-    bg_color = None,    # cor de fundo, primeiro pixel do canto
-    depth = 1,          # niveis de recursão já feitos
-    horizontal = False, # processando horizontalmente?
-    sx = None,          # tamanho da bounding box x
-    sy = None,          # tamanho da bounding box x
-    tx = 0.013,         # tamanho minimo de gap entre 2 elementos
-    ty = 0.006,         # tamanho minimo de gap entre 2 elementos
-    x = 0,              # começo da bounding box
-    y = 0,              # começo da bounding box
-    max_depth = 20      # profundidade máxima
-        ):
+        img,                # imagem de entrada
+        bg_color = None,    # cor de fundo, primeiro pixel do canto
+        depth = 1,          # niveis de recursão já feitos
+        horizontal = False, # processando horizontalmente?
+        sx = None,          # tamanho da bounding box x
+        sy = None,          # tamanho da bounding box x
+        tx = 0.013,         # tamanho minimo de gap entre 2 elementos
+        ty = 0.006,         # tamanho minimo de gap entre 2 elementos
+        x = 0,              # começo da bounding box
+        y = 0,              # começo da bounding box
+        max_depth = 20      # profundidade máxima
+    ):
     (w, h, *rest) = img.shape
     if sx is None or sy is None:
         sx = w
@@ -100,104 +100,107 @@ def get_bounding_boxes(
         sy = sy / h,
         depth = depth
     )
-    if depth > max_depth:
-        return [current_element]
-    biggest_gap = 0
-    current_gap = 0
-    if not horizontal:
-        for i in range(y, y + sy):
-            line = img[x:x+sx, i]
-            if all_line_is_color(line, bg_color):
-                # print('gap')
-                current_gap += 1
-                if current_gap > biggest_gap:
-                    biggest_gap = current_gap
-            else:
-                current_gap = 0
-    else:
-        for i in range(x, x + sx):
-            line = img[i, y:y+sy]
-            if all_line_is_color(line, bg_color):
-                current_gap += 1
-                if current_gap > biggest_gap:
-                    biggest_gap = current_gap
-            else:
-                current_gap = 0
-    biggest_gap = int(3*(biggest_gap / 4))
-    if not horizontal:
-        if biggest_gap < min_gap_x:
-            return [current_element, *get_bounding_boxes(
-                img,
-                depth = depth + 1,
-                bg_color = bg_color,
-                x = x,
-                y = y,
-                sx = sx,
-                sy = sy,
-                horizontal = not horizontal
-            )]
-    else:
-        if biggest_gap < min_gap_y:
-            return [current_element, *get_bounding_boxes(
-                img,
-                depth = depth + 1,
-                bg_color = bg_color,
-                x = x,
-                y = y,
-                sx = sx,
-                sy = sy,
-                horizontal = not horizontal
-            )]
-    if biggest_gap <= 2:
-        return []
-    sections = []
-    current_gap = 0
-    if not horizontal:
-        sections.append(y)
-        for i in range(y, y + sy):
-            line = img[x:x+sx, i]
-            if all_line_is_color(line, bg_color):
-                current_gap += 1
-            else:
-                if current_gap >= biggest_gap:
-                    sections.append(i)
-                    current_gap = 0
-        sections.append(y + sy)
-    else:
-        sections.append(x)
-        for i in range(x, x + sx):
-            line = img[i, y:y+sy]
-            if all_line_is_color(line, bg_color):
-                current_gap += 1
-            else:
-                if current_gap >= biggest_gap:
-                    sections.append(i)
-                    current_gap = 0
-        sections.append(x + sx)
-    positions = [current_element]
-    for i in range(len(sections) - 1):
-        a = sections[i]
-        b = sections[i + 1]
+    yield current_element
+    print('depth', depth, max_depth)
+    if depth < max_depth:
+        biggest_gap = 0
+        current_gap = 0
         if not horizontal:
-            positions = [*positions, *get_bounding_boxes(
-                img,
-                depth = depth + 1,
-                bg_color = bg_color,
-                x = x,
-                y = a,
-                sx = sx,
-                sy = b - a,
-                horizontal = not horizontal
-            )]
+            for i in range(y, y + sy):
+                line = img[x:x+sx, i]
+                if all_line_is_color(line, bg_color):
+                    # print('gap')
+                    current_gap += 1
+                    if current_gap > biggest_gap:
+                        biggest_gap = current_gap
+                else:
+                    current_gap = 0
         else:
-            positions = [*positions, *get_bounding_boxes(
-                img,
-                depth = depth + 1,
-                bg_color = bg_color,
-                x = a,
-                y = y,
-                sx = b - a,
-                sy = sy,
-                horizontal = not horizontal
-            )]
-    return positions
+            for i in range(x, x + sx):
+                line = img[i, y:y+sy]
+                if all_line_is_color(line, bg_color):
+                    current_gap += 1
+                    if current_gap > biggest_gap:
+                        biggest_gap = current_gap
+                else:
+                    current_gap = 0
+        biggest_gap = int(3*(biggest_gap / 4))
+        if not horizontal:
+            if biggest_gap < min_gap_x:
+                yield from get_bounding_boxes(
+                    img,
+                    depth = depth + 1,
+                    max_depth = max_depth,
+                    bg_color = bg_color,
+                    x = x,
+                    y = y,
+                    sx = sx,
+                    sy = sy,
+                    horizontal = not horizontal
+                )
+        else:
+            if biggest_gap < min_gap_y:
+                yield from get_bounding_boxes(
+                    img,
+                    depth = depth + 1,
+                    max_depth = max_depth,
+                    bg_color = bg_color,
+                    x = x,
+                    y = y,
+                    sx = sx,
+                    sy = sy,
+                    horizontal = not horizontal
+                )
+        if biggest_gap <= 2:
+            return
+        sections = []
+        current_gap = 0
+        if not horizontal:
+            sections.append(y)
+            for i in range(y, y + sy):
+                line = img[x:x+sx, i]
+                if all_line_is_color(line, bg_color):
+                    current_gap += 1
+                else:
+                    if current_gap >= biggest_gap:
+                        sections.append(i)
+                        current_gap = 0
+            sections.append(y + sy)
+        else:
+            sections.append(x)
+            for i in range(x, x + sx):
+                line = img[i, y:y+sy]
+                if all_line_is_color(line, bg_color):
+                    current_gap += 1
+                else:
+                    if current_gap >= biggest_gap:
+                        sections.append(i)
+                        current_gap = 0
+            sections.append(x + sx)
+        for i in range(len(sections) - 1):
+            a = sections[i]
+            b = sections[i + 1]
+            if not horizontal:
+                yield from get_bounding_boxes(
+                    img,
+                    depth = depth + 1,
+                    max_depth = max_depth,
+                    bg_color = bg_color,
+                    x = x,
+                    y = a,
+                    sx = sx,
+                    sy = b - a,
+                    horizontal = not horizontal
+                )
+            else:
+                yield from get_bounding_boxes(
+                    img,
+                    depth = depth + 1,
+                    max_depth = max_depth,
+                    bg_color = bg_color,
+                    x = a,
+                    y = y,
+                    sx = b - a,
+                    sy = sy,
+                    horizontal = not horizontal
+                )
