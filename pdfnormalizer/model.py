@@ -97,7 +97,7 @@ def get_bounding_boxes(
         x = x / w,
         y = y / h,
         sx = sx / w,
-        sy = sy / w,
+        sy = sy / h,
         depth = depth
     )
     if depth > max_depth:

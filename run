@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i bash -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.numpy python3Packages.opencv4 python3Packages.screeninfo
+#! nix-shell -i bash -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.numpy python3Packages.opencv4 python3Packages.screeninfo python3Packages.matplotlib
 # vim:ft=bash
 
 export THIS_DIR="$(realpath "$(dirname "$0")")"
