@@ -20,9 +20,18 @@ class CustomGUIHandler(GUIHandler):
         self.only_last_level = False
         self.max_depth = 1
     def frame_transform(self, img):
-        prepared = prepare_page_for_subdivision(img)
-        print(get_bounding_boxes(prepared))
-        return prepared
+        img_copy = img.copy()
+        out = img.copy()
+        w, h, *_ = img.shape
+        print(w, h, _)
+        prepared = prepare_page_for_subdivision(out)
+        print(prepared.shape)
+        bbs = get_bounding_boxes(prepared)
+        print(bbs)
+        for bb in bbs:
+            print(bb)
+            img_copy = cv2.rectangle(img_copy, (int(bb.y * h), int(bb.x * w)), (int((bb.y + bb.sy) * h), int((bb.x + bb.sx) * w)), (5*bb.depth, 0, 0), 2)
+        return img_copy
     # def handle_tx_up(self, gui, value):
     #     if self.tx < 1:
     #         self.tx += 0.01
