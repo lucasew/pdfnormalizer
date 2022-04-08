@@ -4,13 +4,20 @@ from enum import Enum, unique
 import numpy as np
 import cv2
 
-@dataclass
+@dataclass(frozen = True)
 class Element():
     x: float
     y: float
     sx: float
     sy: float
     depth: int
+
+@unique
+class SubdivisionAction(Enum):
+    UNDEFINED = 0
+    END = 1
+    HORIZONTAL = 2
+    VERTICAL = 3
 
 @unique
 class BoundingBoxHint(Enum):
@@ -101,7 +108,7 @@ def get_bounding_boxes(
         depth = depth
     )
     yield current_element
-    print('depth', depth, max_depth)
+    # print('depth', depth, max_depth)
     if depth < max_depth:
         biggest_gap = 0
         current_gap = 0
