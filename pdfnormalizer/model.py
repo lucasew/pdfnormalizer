@@ -18,6 +18,7 @@ class SubdivisionAction(Enum):
     END = 1
     HORIZONTAL = 2
     VERTICAL = 3
+    THRASH = 4
 
 @unique
 class BoundingBoxHint(Enum):

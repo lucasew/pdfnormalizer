@@ -15,6 +15,20 @@ class CustomGUIHandler(GUIHandler):
     elemsv = []
     known_elements = {}
 
+    def get_subdivision(self, elem):
+        if self.known_elements.get(self.page) is None:
+            self.known_elements[self.page] = {}
+        k = (int(elem.x * 100), int(elem.y * 100), int(elem.sx * 100), int(elem.sy * 100))
+        elem, sub = self.known_elements[self.page].get(k)
+        if r is None:
+            return SubdivisionAction.UNDEFINED
+        return sub
+    def set_subdivision(self, elem, sub, replace = False):
+        if self.known_elements.get(self.page) is None:
+            self.known_elements[self.page] = {}
+        k = (int(elem.x * 100), int(elem.y * 100), int(elem.sx * 100), int(elem.sy * 100))
+        if self.known_elements[self.page].get(k) is None or replace:
+            self.known_elements[self.page][k] = (elem, sub)
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
     def handle_page_change(self, gui):
@@ -28,11 +42,8 @@ class CustomGUIHandler(GUIHandler):
         self.handle_page_change(gui)
     def frame_transform(self, img):
         self.current_element = None
-        print(self.known_elements)
-        if self.known_elements.get(self.page) is None:
-            self.known_elements[self.page] = {}
-            self.known_elements[self.page][Element(x = 0, y = 0, sx = 1, sy = 1, depth = 1)] = SubdivisionAction.UNDEFINED
-        for (elem, cls) in self.known_elements[self.page].items():
+        self.set_subdivision(Element(x = 0, y = 0, sx = 1, sy = 1, depth = 1), SubdivisionAction.UNDEFINED)
+        for (_, (elem, cls)) in self.known_elements[self.page].items():
             if cls is SubdivisionAction.UNDEFINED:
                 self.current_element = elem
                 break
@@ -80,38 +91,46 @@ class CustomGUIHandler(GUIHandler):
             imgv = cv2.rectangle(imgv, (y, x), (sy, sx), (0, 255, 0), 2)
         return imgh, imgv
     def handle_selecth(self, gui, value):
-        if len(self.elemsh) > 0 and self.current_element is not None:
-            self.known_elements[self.page][self.current_element] = SubdivisionAction.HORIZONTAL
-            for elem in self.elemsh:
-                if self.known_elements[self.page].get(elem) is None:
-                    self.known_elements[self.page][elem] = SubdivisionAction.UNDEFINED
+        if self.current_element is not None:
+            self.set_subdivision(self.current_element, SubdivisionAction.HORIZONTAL, replace = True)
+            if len(self.elemsh) > 0:
+                for elem in self.elemsh:
+                    self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
             self.current_element = None
             gui.emit('tick')
     def handle_selectv(self, gui, value):
-        if len(self.elemsv) > 0 and self.current_element is not None:
-            self.known_elements[self.page][self.current_element] = SubdivisionAction.VERTICAL
-            for elem in self.elemsh:
-                if self.known_elements[self.page].get(elem) is None:
-                    self.known_elements[self.page][elem] = SubdivisionAction.UNDEFINED
+        if self.current_element is not None:
+            self.set_subdivision(self.current_element, SubdivisionAction.VERTICAL, replace = True)
+            if len(self.elemsv) > 0:
+                for elem in self.elemsv:
+                    self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
             self.current_element = None
             gui.emit('tick')
 
     def handle_eol(self, gui, value):
         if self.current_element is not None:
-            self.known_elements[self.page][self.current_element] = SubdivisionAction.END
+            self.set_subdivision(self.current_element, SubdivisionAction.END, replace = True)
             self.current_element = None
             gui.emit('tick')
+
+    def handle_selectlixo(self, gui, value):
+        if self.current_element is not None:
+            self.set_subdivision(self.current_element, SubdivisionAction.THRASH, replace = True)
+            self.current_element = None
+            gui.emit('tick')
+
     def handle_tick(self, gui, value):
-        # if self.current_element is None:
         self.handle_image_change(gui)
         super().handle_tick(gui, value)
         gui.window['status'].update(value = f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
+
     @property
     def buttons(self):
         return [
             *super().buttons,
-            sg.Button('horiz. (vermelho)', key = 'selecth'),
+            sg.Button('lixo', key = 'selectlixo'),
             sg.Button('vert. (verde)', key = 'selectv'),
+            sg.Button('horiz. (vermelho)', key = 'selecth'),
             sg.Button('fim de linha', key = 'eol'),
             sg.Text(key = 'status')
         ]
