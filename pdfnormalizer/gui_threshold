@@ -1,7 +1,4 @@
 #!/usr/bin/env nix-shell
-#!nix-shell -i python -p null 
-# vim:ft=python
-#!/usr/bin/env nix-shell
 #! nix-shell -i python -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.opencv4 python3Packages.screeninfo
 # vim:ft=python
 
