@@ -1,6 +1,7 @@
 #!/usr/bin/env nix-shell
 #! nix-shell -i python -p python3Packages.pdfminer
 # vim:ft=python
+
 from pathlib import Path
 from typing import Iterable, Any
 
