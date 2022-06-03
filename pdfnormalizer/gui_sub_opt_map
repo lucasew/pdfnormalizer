@@ -27,7 +27,47 @@ class CustomGUIHandler(GUIHandler):
         if r is None:
             return SubdivisionAction.UNDEFINED
         return sub
+    def write_subdivision_result(self, elem, page, result):
+        import sqlite3
+        if self.dbfile is not None:
+            with sqlite3.connect(str(self.dbfile)) as db:
+                db.execute("""
+                create table if not exists datapoints (
+                    page int,
+                    depth int,
+                    x float,
+                    y float,
+                    sx float,
+                    sy float,
+                    classification text default 'SubdivisionAction.UNDEFINED',
+                    unique (page, x, y, sx, sy)
+                );
+                """)
+                db.execute("""
+                insert or ignore into datapoints 
+                    (page, depth, x, y, sx, sy)
+                values 
+                    (?, ?, ?, ?, ?, ?);
+                """, (page, elem.depth, elem.x, elem.y, elem.sx, elem.sy))
+                db.execute("""
+                update datapoints 
+                   set classification = ?
+                where 
+                    classification = 'SubdivisionAction.UNDEFINED'
+                    and page = ?
+                    and depth = ?
+                    and x = ?
+                    and y = ?
+                    and sx = ?
+                    and sy = ?;
+                """, (str(result), page, elem.depth, elem.x, elem.y, elem.sx, elem.sy))
+                db.commit()
+
+
     def set_subdivision(self, elem, sub, replace = False):
+        # print("elemsh", self.elemsh, "elemsv", self.elemsv)
+        self.write_subdivision_result(elem, self.page, sub)
+        print("subdivision: ", elem, sub)
         if self.known_elements.get(self.page) is None:
             self.known_elements[self.page] = {}
         k = (int(elem.x * 100), int(elem.y * 100), int(elem.sx * 100), int(elem.sy * 100))
@@ -35,6 +75,7 @@ class CustomGUIHandler(GUIHandler):
             self.known_elements[self.page][k] = (elem, sub)
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.dbfile = kwargs['dbfile']
     def handle_page_change(self, gui):
         print('current_element', self.current_element)
         gui.emit('tick')
@@ -143,6 +184,7 @@ parser = ArgumentParser()
 parser.add_argument('-i', type = Path, help = "PDF file to process", required = True)
 parser.add_argument('-z', type = float, help = "zoom scale", default = 1)
 parser.add_argument('-n', type = int, help = "start at page", default = 1)
+parser.add_argument('-o', type = Path, help = "sqlite file", default = "./data.db")
 args = parser.parse_args()
 
 scale = args.z
@@ -154,6 +196,6 @@ qt_images = len(images)
 if page < 0 or page >= qt_images:
     raise Exception(f"Invalid page: {page + 1}")
 
-handler = CustomGUIHandler(page = page, scale = scale)
+handler = CustomGUIHandler(page = page, scale = scale, dbfile = args.o)
 gui = GUI(images, handler)
 gui.run()
