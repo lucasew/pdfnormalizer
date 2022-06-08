@@ -41,26 +41,15 @@ class CustomGUIHandler(GUIHandler):
                     sy float,
                     classification text default 'SubdivisionAction.UNDEFINED',
                     unique (page, x, y, sx, sy)
-                );
+                )
                 """)
                 db.execute("""
-                insert or ignore into datapoints 
-                    (page, depth, x, y, sx, sy)
+                insert into datapoints 
+                    (page, depth, x, y, sx, sy, classification)
                 values 
-                    (?, ?, ?, ?, ?, ?);
-                """, (page, elem.depth, elem.x, elem.y, elem.sx, elem.sy))
-                db.execute("""
-                update datapoints 
-                   set classification = ?
-                where 
-                    classification = 'SubdivisionAction.UNDEFINED'
-                    and page = ?
-                    and depth = ?
-                    and x = ?
-                    and y = ?
-                    and sx = ?
-                    and sy = ?;
-                """, (str(result), page, elem.depth, elem.x, elem.y, elem.sx, elem.sy))
+                    (?, ?, ?, ?, ?, ?, ?)
+                on conflict do update set classification=?
+                """, (page, elem.depth, elem.x, elem.y, elem.sx, elem.sy, str(result), str(result)))
                 db.commit()
 
 
@@ -152,17 +141,24 @@ class CustomGUIHandler(GUIHandler):
             self.current_element = None
             gui.emit('tick')
 
-    def handle_eol(self, gui, value):
+    def handle_eol_lixo(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.END, replace = True)
+            self.set_subdivision(self.current_element, SubdivisionAction.END_THRASH, replace = True)
+            self.current_element = None
+            gui.emit('tick')
+    def handle_eol_text(self, gui, value):
+        if self.current_element is not None:
+            self.set_subdivision(self.current_element, SubdivisionAction.END_TEXT, replace = True)
             self.current_element = None
             gui.emit('tick')
 
-    def handle_selectlixo(self, gui, value):
+    def handle_eol_figura(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.THRASH, replace = True)
+            self.set_subdivision(self.current_element, SubdivisionAction.END_FIGURE, replace = True)
             self.current_element = None
             gui.emit('tick')
+
+
 
     def handle_tick(self, gui, value):
         self.handle_image_change(gui)
@@ -173,10 +169,11 @@ class CustomGUIHandler(GUIHandler):
     def buttons(self):
         return [
             *super().buttons,
-            sg.Button('lixo', key = 'selectlixo'),
             sg.Button('vert. (verde)', key = 'selectv'),
             sg.Button('horiz. (vermelho)', key = 'selecth'),
-            sg.Button('fim de linha', key = 'eol'),
+            sg.Button('texto', key = 'eol_text'),
+            sg.Button('figura', key = 'eol_figura'),
+            sg.Button('lixo', key = 'eol_lixo'),
             sg.Text(key = 'status')
         ]
 
@@ -184,7 +181,7 @@ parser = ArgumentParser()
 parser.add_argument('-i', type = Path, help = "PDF file to process", required = True)
 parser.add_argument('-z', type = float, help = "zoom scale", default = 1)
 parser.add_argument('-n', type = int, help = "start at page", default = 1)
-parser.add_argument('-o', type = Path, help = "sqlite file", default = "./data.db")
+parser.add_argument('-o', type = Path, help = "sqlite file")
 args = parser.parse_args()
 
 scale = args.z

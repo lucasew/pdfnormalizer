@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from enum import Enum, unique
  
 import numpy as np
-import cv2
 
 @dataclass(frozen = True)
 class Element():
@@ -15,10 +14,11 @@ class Element():
 @unique
 class SubdivisionAction(Enum):
     UNDEFINED = 0
-    END = 1
-    HORIZONTAL = 2
-    VERTICAL = 3
-    THRASH = 4
+    HORIZONTAL = 1
+    VERTICAL = 2
+    END_THRASH = 3
+    END_TEXT = 4
+    END_FIGURE = 5
 
 @unique
 class BoundingBoxHint(Enum):
@@ -37,6 +37,7 @@ def all_line_is_color(line, color):
     return np.alltrue(line == color)
 
 def prepare_page_for_subdivision(img):
+    import cv2
     (w, h, channels) = img.shape
     background_color = img[0,0]
     mask = cv2.inRange(img, background_color, background_color)

@@ -1,0 +1,86 @@
+#!/usr/bin/env nix-shell
+#! nix-shell -i python -p python3Packages.tensorflow python3Packages.keras python3Packages.pandas python3Packages.scikit-learn
+# vim:ft=python
+
+from argparse import ArgumentParser
+from pathlib import Path
+import sqlite3
+
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from matplotlib import pyplot as plt
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics import ConfusionMatrixDisplay
+
+parser = ArgumentParser()
+parser.add_argument("-d", type = Path, help = "db file to input", required = True)
+args = parser.parse_args()
+
+
+NUM_CLASSES = 5
+
+conn = sqlite3.connect(str(args.d))
+df = pd.read_sql("select * from datapoints", con = conn)
+print(df)
+
+# oh_classification = pd.get_dummies(df['classification'])
+
+# df = pd.merge(left=df, right=oh_classification, left_index=True, right_index=True)
+df['classification_idx'] = pd.Categorical(df['classification'])
+df['classification_idx'] = df.classification_idx.cat.codes
+df['norm_depth'] = df['depth'] / 20
+
+def extract_datapoints(df):
+    return df[['norm_depth', 'x', 'sx', 'y', 'sy']], df[['classification_idx']]
+
+df_train = df.sample(frac=0.8, random_state=0)
+df_test = df.drop(df_train.index)
+
+x_train, y_train = extract_datapoints(df_train)
+x_test, y_test = extract_datapoints(df_test)
+# print(oh_classification)
+
+print(df)
+# print(df['classification_idx'])
+
+
+# exit(0)
+
+model = tf.keras.models.Sequential([
+    tf.keras.layers.Dense(4, activation='relu'),
+    tf.keras.layers.Dense(16, activation='relu'),
+    tf.keras.layers.Dense(8, activation='relu'),
+    tf.keras.layers.Dense(8, activation='relu'),
+    tf.keras.layers.Dense(NUM_CLASSES, activation = 'softmax') #classificação multiclasse
+])
+
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+# exit(0)
+
+history = model.fit(x_train, y_train, epochs=2000)
+model.evaluate(x_test, y_test)
+predicted = model.predict(x_test)
+
+plt.plot(history.epoch, history.history['accuracy'], 'r', label="Acurácia")
+plt.plot(history.epoch, history.history['loss'], 'g', label="Loss")
+plt.legend()
+plt.show()
+
+y_test_hot_encoded = np.zeros(dtype='float32', shape=predicted.shape)
+for i, item in enumerate(np.array(y_test)):
+    print(item)
+    y_test_hot_encoded[i,item[0]] = 1
+
+
+
+print(y_test_hot_encoded)
+print(predicted)
+print(y_test_hot_encoded.dtype, predicted.dtype)
+ConfusionMatrixDisplay.from_predictions(tf.argmax(y_test_hot_encoded), tf.argmax(predicted))
+plt.show()
