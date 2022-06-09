@@ -12,32 +12,33 @@ import tensorflow as tf
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
+from sklearn.metrics import classification_report
 
 parser = ArgumentParser()
 parser.add_argument("-d", type = Path, help = "db file to input", required = True)
 parser.add_argument("-e", type = int, help = "epochs", default = 200)
+parser.add_argument("-m", type = bool, help = "mostrar matriz de confusão", default = False)
+parser.add_argument("-a", type = bool, help = "mostrar loss e acurácia", default = False)
+parser.add_argument("-o", type = Path, help = "onde salvar o modelo")
 args = parser.parse_args()
-
-
 
 conn = sqlite3.connect(str(args.d))
 df = pd.read_sql("select * from datapoints", con = conn)
 print(df)
 
-# oh_classification = pd.get_dummies(df['classification'])
-
-# df = pd.merge(left=df, right=oh_classification, left_index=True, right_index=True)
 df['classification_idx'] = pd.Categorical(df['classification'])
 labels = list(df.classification_idx.cat.categories)
 df['classification_idx'] = df.classification_idx.cat.codes
+print(labels, df['classification_idx'].max(), df['classification_idx'].min())
 df['norm_depth'] = df['depth'] / 20
 
 NUM_CLASSES = len(labels)
+print("classes", NUM_CLASSES)
 
 def extract_datapoints(df):
     return df[['norm_depth', 'x', 'sx', 'y', 'sy']], df[['classification_idx']]
 
-df_train = df.sample(frac=0.8, random_state=0)
+df_train = df.sample(frac=0.7, random_state=0)
 df_test = df.drop(df_train.index)
 
 x_train, y_train = extract_datapoints(df_train)
@@ -64,31 +65,31 @@ model.compile(
     metrics=['accuracy']
 )
 
-# exit(0)
-
 history = model.fit(x_train, y_train, epochs=args.e)
-model.evaluate(x_test, y_test)
-predicted = model.predict(x_test)
+print(model.evaluate(x_test, y_test))
 
-plt.plot(history.epoch, history.history['accuracy'], 'r', label="Acurácia")
-plt.plot(history.epoch, history.history['loss'], 'g', label="Loss")
-plt.legend()
-plt.show()
+if args.o is not None:
+    model.save(str(args.o))
 
-# y_test_hot_encoded = np.zeros(dtype='float32', shape=predicted.shape)
-# for i, item in enumerate(np.array(y_test)):
-#     print(item)
-#     y_test_hot_encoded[i,item[0]] = 1
+if args.a:
+    plt.plot(history.epoch, history.history['accuracy'], 'r', label="Acurácia")
+    plt.plot(history.epoch, history.history['loss'], 'g', label="Loss")
+    plt.legend()
+    plt.show()
 
+if args.m:
+    predicted = model.predict(x_test)
+    y_test = np.array(y_test)
+    norm_predicted = np.cast['int8'](tf.argmax(predicted.T))
+    print(y_test.dtype, y_test.shape, predicted.dtype, predicted.shape, norm_predicted.shape, norm_predicted.dtype)
 
+    print(classification_report(y_test, norm_predicted, labels=list(range(NUM_CLASSES)), target_names = labels))
 
-y_test = np.array(y_test)
-# print(y_test_hot_encoded)
-# print(predicted)
-print(y_test.dtype, y_test.shape, predicted.dtype, predicted.shape, tf.argmax(predicted.T).shape)
+    cm = confusion_matrix(y_test, norm_predicted, labels = list(range(NUM_CLASSES)))
+    print(cm)
+    ConfusionMatrixDisplay(
+        cm,
+        display_labels = labels
+    ).plot()
 
-cm = confusion_matrix(y_test, tf.argmax(predicted.T))
-print(cm)
-ConfusionMatrixDisplay(cm, display_labels = labels).plot() # broken
-
-plt.show()
+    plt.show()
