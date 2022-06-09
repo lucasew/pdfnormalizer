@@ -11,14 +11,14 @@ import pandas as pd
 import tensorflow as tf
 from matplotlib import pyplot as plt
 from sklearn.preprocessing import OneHotEncoder
-from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
 
 parser = ArgumentParser()
 parser.add_argument("-d", type = Path, help = "db file to input", required = True)
+parser.add_argument("-e", type = int, help = "epochs", default = 200)
 args = parser.parse_args()
 
 
-NUM_CLASSES = 5
 
 conn = sqlite3.connect(str(args.d))
 df = pd.read_sql("select * from datapoints", con = conn)
@@ -28,8 +28,11 @@ print(df)
 
 # df = pd.merge(left=df, right=oh_classification, left_index=True, right_index=True)
 df['classification_idx'] = pd.Categorical(df['classification'])
+labels = list(df.classification_idx.cat.categories)
 df['classification_idx'] = df.classification_idx.cat.codes
 df['norm_depth'] = df['depth'] / 20
+
+NUM_CLASSES = len(labels)
 
 def extract_datapoints(df):
     return df[['norm_depth', 'x', 'sx', 'y', 'sy']], df[['classification_idx']]
@@ -48,7 +51,7 @@ print(df)
 # exit(0)
 
 model = tf.keras.models.Sequential([
-    tf.keras.layers.Dense(4, activation='relu'),
+    tf.keras.layers.Dense(5, activation='relu'),
     tf.keras.layers.Dense(16, activation='relu'),
     tf.keras.layers.Dense(8, activation='relu'),
     tf.keras.layers.Dense(8, activation='relu'),
@@ -63,7 +66,7 @@ model.compile(
 
 # exit(0)
 
-history = model.fit(x_train, y_train, epochs=2000)
+history = model.fit(x_train, y_train, epochs=args.e)
 model.evaluate(x_test, y_test)
 predicted = model.predict(x_test)
 
@@ -82,6 +85,10 @@ plt.show()
 y_test = np.array(y_test)
 # print(y_test_hot_encoded)
 # print(predicted)
-# print(y_test.dtype, y_test.shape, predicted.dtype, predicted.shape)
-ConfusionMatrixDisplay.from_predictions(y_test, tf.argmax(predicted.T))
+print(y_test.dtype, y_test.shape, predicted.dtype, predicted.shape, tf.argmax(predicted.T).shape)
+
+cm = confusion_matrix(y_test, tf.argmax(predicted.T))
+print(cm)
+ConfusionMatrixDisplay(cm, display_labels = labels).plot() # broken
+
 plt.show()
