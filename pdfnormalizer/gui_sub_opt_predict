@@ -1,0 +1,82 @@
+#!/usr/bin/env nix-shell
+#! nix-shell -i python -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.opencv4 python3Packages.screeninfo python3Packages.tensorflow python3Packages.keras
+# vim:ft=python
+
+from argparse import ArgumentParser
+from pdf2image import convert_from_path
+from pathlib import Path
+import PySimpleGUI as sg
+import numpy as np
+import cv2
+import random
+from screeninfo import get_monitors, Enumerator
+from pdfnormalizer.utils import array_to_data, GUI, GUIHandler
+from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction
+import tensorflow as tf
+
+class CustomGUIHandler(GUIHandler):
+    current_element = None
+
+    def get_elem_key(self, elem):
+        return (int(elem.x * 1000), int(elem.y * 1000), int(elem.sx * 1000), int(elem.sy * 1000))
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.model = tf.keras.models.load_model(kwargs['model'])
+    def handle_page_change(self, gui):
+        print('current_element', self.current_element)
+        gui.emit('tick')
+    def handle_prev(self, gui, value):
+        super().handle_prev(gui, value)
+        self.handle_page_change(gui)
+    def handle_next(self, gui, value):
+        super().handle_next(gui, value)
+        self.handle_page_change(gui)
+    def frame_transform(self, img):
+        print('frame_transform')
+        self.current_element = None
+        prepared = prepare_page_for_subdivision(img)
+        bbx = get_bounding_boxes(img).next()
+        print(bbx)
+        print(img, prepared)
+        return img, prepared
+
+    def handle_tick(self, gui, value):
+        self.handle_image_change(gui)
+        super().handle_tick(gui, value)
+        gui.window['status'].update(value = f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
+        # print(len(self.known_elements))
+
+    @property
+    def buttons(self):
+        return [
+            *super().buttons,
+            # sg.Button('vert. (verde)', key = 'selectv'),
+            # sg.Button('horiz. (vermelho)', key = 'selecth'),
+            # sg.Button('texto', key = 'eol_text'),
+            # sg.Button('figura', key = 'eol_figura'),
+            # sg.Button('lixo', key = 'eol_lixo'),
+            # sg.Button('skip', key = 'skip'),
+            # sg.Text(key = 'status')
+        ]
+
+parser = ArgumentParser()
+parser.add_argument('-i', type = Path, help = "PDF file to process", required = True)
+parser.add_argument('-z', type = float, help = "zoom scale", default = 1)
+parser.add_argument('-n', type = int, help = "start at page", default = 1)
+parser.add_argument('-m', type = Path, help = "model file (h5)", required = True)
+
+args = parser.parse_args()
+
+scale = args.z
+page = args.n - 1
+
+images = convert_from_path(args.i)
+qt_images = len(images)
+
+if page < 0 or page >= qt_images:
+    raise Exception(f"Invalid page: {page + 1}")
+
+handler = CustomGUIHandler(page = page, scale = scale, model = args.m)
+gui = GUI(images, handler)
+gui.run()

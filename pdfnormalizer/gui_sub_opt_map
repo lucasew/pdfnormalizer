@@ -19,10 +19,13 @@ class CustomGUIHandler(GUIHandler):
     elemsv = []
     known_elements = {}
 
+    def get_elem_key(self, elem):
+        return (int(elem.x * 1000), int(elem.y * 1000), int(elem.sx * 1000), int(elem.sy * 1000))
+
     def get_subdivision(self, elem):
         if self.known_elements.get(self.page) is None:
             self.known_elements[self.page] = {}
-        k = (int(elem.x * 100), int(elem.y * 100), int(elem.sx * 100), int(elem.sy * 100))
+        k = get_elem_key()
         elem, sub = self.known_elements[self.page].get(k)
         if r is None:
             return SubdivisionAction.UNDEFINED
@@ -30,6 +33,7 @@ class CustomGUIHandler(GUIHandler):
     def write_subdivision_result(self, elem, page, result):
         import sqlite3
         if self.dbfile is not None:
+            print("write_subdivision_result", elem, page, result)
             with sqlite3.connect(str(self.dbfile)) as db:
                 db.execute("""
                 create table if not exists datapoints (
@@ -55,13 +59,19 @@ class CustomGUIHandler(GUIHandler):
 
     def set_subdivision(self, elem, sub, replace = False):
         # print("elemsh", self.elemsh, "elemsv", self.elemsv)
-        self.write_subdivision_result(elem, self.page, sub)
         print("subdivision: ", elem, sub)
         if self.known_elements.get(self.page) is None:
             self.known_elements[self.page] = {}
-        k = (int(elem.x * 100), int(elem.y * 100), int(elem.sx * 100), int(elem.sy * 100))
-        if self.known_elements[self.page].get(k) is None or replace:
-            self.known_elements[self.page][k] = (elem, sub)
+        k = get_elem_key()
+        if sub is None:
+            try:
+                self.known_elements[self.page].pop(k)
+            except KeyError:
+                pass
+        else:
+            self.write_subdivision_result(elem, self.page, sub)
+            if self.known_elements[self.page].get(k) is None or replace:
+                self.known_elements[self.page][k] = (elem, sub)
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.dbfile = kwargs['dbfile']
@@ -158,12 +168,17 @@ class CustomGUIHandler(GUIHandler):
             self.current_element = None
             gui.emit('tick')
 
-
+    def handle_skip(self, gui, value):
+        if self.current_element is not None:
+            self.set_subdivision(self.current_element, None, replace = True)
+            self.current_element = None
+            gui.emit('tick')
 
     def handle_tick(self, gui, value):
         self.handle_image_change(gui)
         super().handle_tick(gui, value)
         gui.window['status'].update(value = f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
+        # print(len(self.known_elements))
 
     @property
     def buttons(self):
@@ -174,6 +189,7 @@ class CustomGUIHandler(GUIHandler):
             sg.Button('texto', key = 'eol_text'),
             sg.Button('figura', key = 'eol_figura'),
             sg.Button('lixo', key = 'eol_lixo'),
+            sg.Button('skip', key = 'skip'),
             sg.Text(key = 'status')
         ]
 

@@ -54,8 +54,8 @@ print(df)
 model = tf.keras.models.Sequential([
     tf.keras.layers.Dense(5, activation='relu'),
     tf.keras.layers.Dense(16, activation='relu'),
-    tf.keras.layers.Dense(8, activation='relu'),
-    tf.keras.layers.Dense(8, activation='relu'),
+    # tf.keras.layers.Dense(8, activation='relu'),
+    # tf.keras.layers.Dense(8, activation='relu'),
     tf.keras.layers.Dense(NUM_CLASSES, activation = 'softmax') #classificação multiclasse
 ])
 
