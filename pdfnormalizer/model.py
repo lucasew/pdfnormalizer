@@ -1,9 +1,10 @@
 from dataclasses import dataclass
 from enum import Enum, unique
- 
+
 import numpy as np
 
-@dataclass(frozen = True)
+
+@dataclass(frozen=True)
 class Element():
     x: float
     y: float
@@ -11,14 +12,16 @@ class Element():
     sy: float
     depth: int
 
+
 @unique
 class SubdivisionAction(Enum):
     UNDEFINED = 0
-    HORIZONTAL = 1
-    VERTICAL = 2
+    END_FIGURE = 1
+    END_TEXT = 2
     END_THRASH = 3
-    END_TEXT = 4
-    END_FIGURE = 5
+    HORIZONTAL = 4
+    VERTICAL = 5
+
 
 @unique
 class BoundingBoxHint(Enum):
@@ -33,13 +36,15 @@ class BoundingBoxHint(Enum):
     FOOTER                = 9          # rodapé, geralmente remove
     END_OF_LINE           = 10         # elemento encontrado quando a recursão vai fundo demais
 
+
 def all_line_is_color(line, color):
     return np.alltrue(line == color)
+
 
 def prepare_page_for_subdivision(img):
     import cv2
     (w, h, channels) = img.shape
-    background_color = img[0,0]
+    background_color = img[0, 0]
     mask = cv2.inRange(img, background_color, background_color)
     mask = 255 - mask
     kernel = np.zeros((3, 5), np.uint8)
@@ -51,19 +56,57 @@ def prepare_page_for_subdivision(img):
     _, mask = cv2.threshold(mask, 250, 255, cv2.THRESH_BINARY)
     return mask
 
+
+def trim_whitespace(img, sx=None, sy=None, x=0, y=0, bg_color=None):
+    if bg_color is None:
+        bg_color = img[x, y]
+    (w, h, *rest) = img.shape
+    if sx is None or sy is None:
+        sx = w
+        sy = h
+    for i in range(y, y + sy):  # cima pra baixo
+        line = img[x:x+sx, i]
+        if all_line_is_color(line, bg_color) and sy > 0:
+            y += 1
+            sy -= 1
+            continue
+        break
+    for i in reversed(range(y - 1, y+sy)):  # baixo pra cima
+        line = img[x:x+sx, i]
+        if all_line_is_color(line, bg_color) and sy > 0:
+            sy -= 1
+            continue
+        break
+    for i in range(x, x+sx):  # esquerda pra direita
+        line = img[i, y:y+sy]
+        if all_line_is_color(line, bg_color) and sx > 0:
+            x += 1
+            sx -= 1
+            continue
+        break
+    for i in reversed(range(x - 1, x+sx)):  # direita pra esquerda
+        line = img[i, y:y+sy]
+        if all_line_is_color(line, bg_color) and sx > 0:
+            sx -= 1
+            continue
+        break
+    return (x, y, sx, sy)
+
+
 def get_bounding_boxes(
         img,                # imagem de entrada
-        bg_color = None,    # cor de fundo, primeiro pixel do canto
-        depth = 1,          # niveis de recursão já feitos
-        horizontal = False, # processando horizontalmente?
-        sx = None,          # tamanho da bounding box x
-        sy = None,          # tamanho da bounding box x
-        tx = 0.013,         # tamanho minimo de gap entre 2 elementos
-        ty = 0.006,         # tamanho minimo de gap entre 2 elementos
-        x = 0,              # começo da bounding box
-        y = 0,              # começo da bounding box
-        max_depth = 20      # profundidade máxima
-    ):
+        bg_color=None,      # cor de fundo, primeiro pixel do canto
+        depth=1,            # niveis de recursão já feitos
+        horizontal=False,   # processando horizontalmente?
+        sx=None,            # tamanho da bounding box x
+        sy=None,            # tamanho da bounding box x
+        tx=0.013,           # tamanho minimo de gap entre 2 elementos
+        ty=0.006,           # tamanho minimo de gap entre 2 elementos
+        x=0,                # começo da bounding box
+        y=0,                # começo da bounding box
+        max_depth=20        # profundidade máxima
+        ):
+    ret = []
     (w, h, *rest) = img.shape
     if sx is None or sy is None:
         sx = w
@@ -76,41 +119,8 @@ def get_bounding_boxes(
         bg_color = img[x, y]
     if all_line_is_color(np.reshape(img[x:x+sx, y:y+sy], (sx*sy)), bg_color):
         return []
-    for i in range(y, y + sy): # cima pra baixo
-        line = img[x:x+sx, i]
-        if all_line_is_color(line, bg_color) and sy > 0:
-            y += 1
-            sy -= 1
-            continue
-        break
-    for i in reversed(range(y - 1, y+sy)): # baixo pra cima
-        line = img[x:x+sx, i]
-        if all_line_is_color(line, bg_color) and sy > 0:
-            sy -= 1
-            continue
-        break
-    for i in range(x, x+sx): # esquerda pra direita
-        line = img[i, y:y+sy]
-        if all_line_is_color(line, bg_color) and sx > 0:
-            x += 1
-            sx -= 1
-            continue
-        break
-    for i in reversed(range(x - 1, x+sx)): # direita pra esquerda
-        line = img[i, y:y+sy]
-        if all_line_is_color(line, bg_color) and sx > 0:
-            sx -= 1
-            continue
-        break
-    current_element = Element(
-        x = x / w,
-        y = y / h,
-        sx = sx / w,
-        sy = sy / h,
-        depth = depth
-    )
-    yield current_element
-    # print('depth', depth, max_depth)
+    (x, y, sx, sy) = trim_whitespace(img, sx=sx, sy=sy, x=x, y=y, bg_color=bg_color)
+    print('depth', depth, max_depth, 'unwhitespaced', x, y, sx, sy)
     if depth < max_depth:
         biggest_gap = 0
         current_gap = 0
@@ -136,29 +146,29 @@ def get_bounding_boxes(
         biggest_gap = int(3*(biggest_gap / 4))
         if not horizontal:
             if biggest_gap < min_gap_x:
-                yield from get_bounding_boxes(
+                return get_bounding_boxes(
                     img,
-                    depth = depth + 1,
-                    max_depth = max_depth,
-                    bg_color = bg_color,
-                    x = x,
-                    y = y,
-                    sx = sx,
-                    sy = sy,
-                    horizontal = not horizontal
+                    depth=depth+1,
+                    max_depth=max_depth,
+                    bg_color=bg_color,
+                    x=x,
+                    y=y,
+                    sx=sx,
+                    sy=sy,
+                    horizontal=not horizontal
                 )
         else:
             if biggest_gap < min_gap_y:
-                yield from get_bounding_boxes(
+                return get_bounding_boxes(
                     img,
-                    depth = depth + 1,
-                    max_depth = max_depth,
-                    bg_color = bg_color,
-                    x = x,
-                    y = y,
-                    sx = sx,
-                    sy = sy,
-                    horizontal = not horizontal
+                    depth=depth+1,
+                    max_depth=max_depth,
+                    bg_color=bg_color,
+                    x=x,
+                    y=y,
+                    sx=sx,
+                    sy=sy,
+                    horizontal=not horizontal
                 )
         if biggest_gap <= 2:
             return
@@ -190,26 +200,31 @@ def get_bounding_boxes(
             a = sections[i]
             b = sections[i + 1]
             if not horizontal:
-                yield from get_bounding_boxes(
+                for b in get_bounding_boxes(
                     img,
-                    depth = depth + 1,
-                    max_depth = max_depth,
-                    bg_color = bg_color,
-                    x = x,
-                    y = a,
-                    sx = sx,
-                    sy = b - a,
-                    horizontal = not horizontal
-                )
+                    depth=depth+1,
+                    max_depth=max_depth,
+                    bg_color=bg_color,
+                    x=x,
+                    y=a,
+                    sx=sx,
+                    sy=b-a,
+                    horizontal=not horizontal
+                ):
+                    ret.append(b)
             else:
-                yield from get_bounding_boxes(
+                for b in get_bounding_boxes(
                     img,
-                    depth = depth + 1,
-                    max_depth = max_depth,
-                    bg_color = bg_color,
-                    x = a,
-                    y = y,
-                    sx = b - a,
-                    sy = sy,
-                    horizontal = not horizontal
-                )
+                    depth=depth+1,
+                    max_depth=max_depth,
+                    bg_color=bg_color,
+                    x=a,
+                    y=y,
+                    sx=b-a,
+                    sy=sy,
+                    horizontal=not horizontal
+                ):
+                    ret.append(b)
+    else:
+        ret.append(Element(x=x/w, y=y/h, sx=sx/w, sy=sy/h, depth=depth)),
+    return ret

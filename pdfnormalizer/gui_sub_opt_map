@@ -11,7 +11,8 @@ import cv2
 import random
 from screeninfo import get_monitors, Enumerator
 from pdfnormalizer.utils import array_to_data, GUI, GUIHandler
-from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction
+from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction, trim_whitespace
+
 
 class CustomGUIHandler(GUIHandler):
     current_element = None
@@ -25,11 +26,12 @@ class CustomGUIHandler(GUIHandler):
     def get_subdivision(self, elem):
         if self.known_elements.get(self.page) is None:
             self.known_elements[self.page] = {}
-        k = get_elem_key()
+        k = self.get_elem_key(elem)
         elem, sub = self.known_elements[self.page].get(k)
-        if r is None:
+        if sub is None:
             return SubdivisionAction.UNDEFINED
         return sub
+
     def write_subdivision_result(self, elem, page, result):
         import sqlite3
         if self.dbfile is not None:
@@ -48,21 +50,20 @@ class CustomGUIHandler(GUIHandler):
                 )
                 """)
                 db.execute("""
-                insert into datapoints 
+                insert into datapoints
                     (page, depth, x, y, sx, sy, classification)
-                values 
+                values
                     (?, ?, ?, ?, ?, ?, ?)
                 on conflict do update set classification=?
                 """, (page, elem.depth, elem.x, elem.y, elem.sx, elem.sy, str(result), str(result)))
                 db.commit()
 
-
-    def set_subdivision(self, elem, sub, replace = False):
+    def set_subdivision(self, elem, sub, replace=False):
         # print("elemsh", self.elemsh, "elemsv", self.elemsv)
         print("subdivision: ", elem, sub)
         if self.known_elements.get(self.page) is None:
             self.known_elements[self.page] = {}
-        k = get_elem_key()
+        k = self.get_elem_key(elem)
         if sub is None:
             try:
                 self.known_elements[self.page].pop(k)
@@ -72,52 +73,65 @@ class CustomGUIHandler(GUIHandler):
             self.write_subdivision_result(elem, self.page, sub)
             if self.known_elements[self.page].get(k) is None or replace:
                 self.known_elements[self.page][k] = (elem, sub)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.dbfile = kwargs['dbfile']
+
     def handle_page_change(self, gui):
         print('current_element', self.current_element)
         gui.emit('tick')
+
     def handle_prev(self, gui, value):
         super().handle_prev(gui, value)
         self.handle_page_change(gui)
+
     def handle_next(self, gui, value):
         super().handle_next(gui, value)
         self.handle_page_change(gui)
+
     def frame_transform(self, img):
+        w, h, *_ = img.shape
+        prepared = prepare_page_for_subdivision(img)
+        (x, y, sx, sy) = trim_whitespace(prepared,
+            x=0,
+            y=0,
+            sx=w,
+            sy=h
+        )
         self.current_element = None
-        self.set_subdivision(Element(x = 0, y = 0, sx = 1, sy = 1, depth = 1), SubdivisionAction.UNDEFINED)
+        self.set_subdivision(Element(x=x/w, y=y/h, sx=sx/w, sy=sy/h, depth=1), SubdivisionAction.UNDEFINED)
         for (_, (elem, cls)) in self.known_elements[self.page].items():
             if cls is SubdivisionAction.UNDEFINED:
                 self.current_element = elem
                 break
+        print(self.current_element)
         if self.current_element is None:
             return img
         imgh = img.copy()
         imgv = img.copy()
-        w, h, *_ = img.shape
         # print(w, h, _)
         depth = self.current_element.depth
-        prepared = prepare_page_for_subdivision(img)
-        bbh = [*get_bounding_boxes(prepared,
-            horizontal = True,
-            depth = depth,
-            max_depth = depth + 1,
-            sx = int(self.current_element.sx * w),
-            sy = int(self.current_element.sy * h),
-            x = int(self.current_element.x * w),
-            y = int(self.current_element.y * h)
-        )]
+        print(depth)
+        bbh = get_bounding_boxes(prepared,
+            horizontal=True,
+            depth=depth,
+            max_depth=depth+1,
+            sx=int(self.current_element.sx * w),
+            sy=int(self.current_element.sy * h),
+            x=int(self.current_element.x * w),
+            y=int(self.current_element.y * h)
+        )
         self.elemsh = bbh
-        bbv = [*get_bounding_boxes(prepared,
-            horizontal = False,
-            depth = depth,
-            max_depth = depth + 1,
-            sx = int(self.current_element.sx * w),
-            sy = int(self.current_element.sy * h),
-            x = int(self.current_element.x * w),
-            y = int(self.current_element.y * h)
-        )]
+        bbv = get_bounding_boxes(prepared,
+            horizontal=False,
+            depth=depth,
+            max_depth=depth+1,
+            sx=int(self.current_element.sx * w),
+            sy=int(self.current_element.sy * h),
+            x=int(self.current_element.x * w),
+            y=int(self.current_element.y * h)
+        )
         self.elemsv = bbv
         for bb in bbh:
             # print('bbh', bb)
@@ -125,6 +139,7 @@ class CustomGUIHandler(GUIHandler):
             y = int(bb.y * h)
             sx = int((bb.x + bb.sx) * w)
             sy = int((bb.y + bb.sy) * h)
+            print(x, y, sx, sy)
             imgh = cv2.rectangle(imgh, (y, x), (sy, sx), (255, 0, 0), 2)
         for bb in bbv:
             # print('bbv', bb)
@@ -132,19 +147,23 @@ class CustomGUIHandler(GUIHandler):
             y = int(bb.y * h)
             sx = int((bb.x + bb.sx) * w)
             sy = int((bb.y + bb.sy) * h)
+            print(x, y, sx, sy)
             imgv = cv2.rectangle(imgv, (y, x), (sy, sx), (0, 255, 0), 2)
+        print(bbh, bbv)
         return imgh, imgv
+
     def handle_selecth(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.HORIZONTAL, replace = True)
+            self.set_subdivision(self.current_element, SubdivisionAction.HORIZONTAL, replace=True)
             if len(self.elemsh) > 0:
                 for elem in self.elemsh:
                     self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
             self.current_element = None
             gui.emit('tick')
+
     def handle_selectv(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.VERTICAL, replace = True)
+            self.set_subdivision(self.current_element, SubdivisionAction.VERTICAL, replace=True)
             if len(self.elemsv) > 0:
                 for elem in self.elemsv:
                     self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
@@ -153,51 +172,53 @@ class CustomGUIHandler(GUIHandler):
 
     def handle_eol_lixo(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.END_THRASH, replace = True)
+            self.set_subdivision(self.current_element, SubdivisionAction.END_THRASH, replace=True)
             self.current_element = None
             gui.emit('tick')
+
     def handle_eol_text(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.END_TEXT, replace = True)
+            self.set_subdivision(self.current_element, SubdivisionAction.END_TEXT, replace=True)
             self.current_element = None
             gui.emit('tick')
 
     def handle_eol_figura(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.END_FIGURE, replace = True)
+            self.set_subdivision(self.current_element, SubdivisionAction.END_FIGURE, replace=True)
             self.current_element = None
             gui.emit('tick')
 
     def handle_skip(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, None, replace = True)
+            self.set_subdivision(self.current_element, None, replace=True)
             self.current_element = None
             gui.emit('tick')
 
     def handle_tick(self, gui, value):
         self.handle_image_change(gui)
         super().handle_tick(gui, value)
-        gui.window['status'].update(value = f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
+        gui.window['status'].update(value=f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
         # print(len(self.known_elements))
 
     @property
     def buttons(self):
         return [
             *super().buttons,
-            sg.Button('vert. (verde)', key = 'selectv'),
-            sg.Button('horiz. (vermelho)', key = 'selecth'),
-            sg.Button('texto', key = 'eol_text'),
-            sg.Button('figura', key = 'eol_figura'),
-            sg.Button('lixo', key = 'eol_lixo'),
-            sg.Button('skip', key = 'skip'),
-            sg.Text(key = 'status')
+            sg.Button('vert. (verde)', key='selectv'),
+            sg.Button('horiz. (vermelho)', key='selecth'),
+            sg.Button('texto', key='eol_text'),
+            sg.Button('figura', key='eol_figura'),
+            sg.Button('lixo', key='eol_lixo'),
+            sg.Button('skip', key='skip'),
+            sg.Text(key='status')
         ]
 
+
 parser = ArgumentParser()
-parser.add_argument('-i', type = Path, help = "PDF file to process", required = True)
-parser.add_argument('-z', type = float, help = "zoom scale", default = 1)
-parser.add_argument('-n', type = int, help = "start at page", default = 1)
-parser.add_argument('-o', type = Path, help = "sqlite file")
+parser.add_argument('-i', type=Path, help="PDF file to process", required=True)
+parser.add_argument('-z', type=float, help="zoom scale", default=1)
+parser.add_argument('-n', type=int, help="start at page", default=1)
+parser.add_argument('-o', type=Path, help="sqlite file")
 args = parser.parse_args()
 
 scale = args.z
@@ -209,6 +230,6 @@ qt_images = len(images)
 if page < 0 or page >= qt_images:
     raise Exception(f"Invalid page: {page + 1}")
 
-handler = CustomGUIHandler(page = page, scale = scale, dbfile = args.o)
+handler = CustomGUIHandler(page=page, scale=scale, dbfile=args.o)
 gui = GUI(images, handler)
 gui.run()
