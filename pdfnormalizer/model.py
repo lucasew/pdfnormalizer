@@ -171,7 +171,7 @@ def get_bounding_boxes(
                     horizontal=not horizontal
                 )
         if biggest_gap <= 2:
-            return
+            return []
         sections = []
         current_gap = 0
         if not horizontal:

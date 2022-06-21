@@ -37,20 +37,16 @@ class CustomGUIHandler(GUIHandler):
 
     def frame_transform(self, img):
         print(np.min(img), np.max(img))
-        print('frame_transform')
-        queue = []
         w, h, *rest = img.shape
+        img = img.copy()
+        ret = img.copy()
+        ret[:, :, :] = 0
         prepared = prepare_page_for_subdivision(img)
-        ret = np.zeros(shape=tuple(img.shape), dtype='uint8')
+        queue = []
         self.current_element = None
         queue.append((*trim_whitespace(prepared), 1))
-        print("antesloop", queue)
-        plt.hist(img.flatten())
-        plt.show()
-        return img
-        while len(self.queue) > 0:
+        while len(queue) > 0:
             print("loop")
-            print("queue", queue)
             (x, y, sx, sy, depth) = queue.pop()
             print(x, y, sx, sy, depth)
             cls = self.model.predict(np.array([[
@@ -60,11 +56,10 @@ class CustomGUIHandler(GUIHandler):
                 sx / w,
                 sy / h
             ]]))
-            print("processou modelo")
             prediction = SubdivisionAction(int(tf.argmax(cls.T)[0])+1)
             print("prediction", prediction)
             if prediction == SubdivisionAction.HORIZONTAL:
-                for it in get_bounding_boxes(
+                bbx = get_bounding_boxes(
                     prepared,
                     depth=depth,
                     horizontal=True,
@@ -73,16 +68,20 @@ class CustomGUIHandler(GUIHandler):
                     x=x,
                     y=y,
                     max_depth=depth+1
-                ):
-                    queue.push((
-                        it.x*w,
-                        it.y*h,
-                        it.sx*w,
-                        it.sy*h,
+                )
+                print(bbx)
+                for it in bbx:
+                    print(it)
+                    queue.append([
+                        int(it.x*w),
+                        int(it.y*h),
+                        int(it.sx*w),
+                        int(it.sy*h),
                         depth+1
-                    ))
+                    ])
+                    print(queue)
             if prediction == SubdivisionAction.VERTICAL:
-                for it in get_bounding_boxes(
+                bbx = get_bounding_boxes(
                     prepared,
                     depth=depth,
                     horizontal=False,
@@ -91,14 +90,17 @@ class CustomGUIHandler(GUIHandler):
                     x=x,
                     y=y,
                     max_depth=depth+1
-                ):
-                    queue.push((
-                        it.x*w,
-                        it.y*h,
-                        it.sx*w,
-                        it.sy*h,
+                )
+                for it in bbx:
+                    print(it)
+                    queue.append([
+                        int(it.x*w),
+                        int(it.y*h),
+                        int(it.sx*w),
+                        int(it.sy*h),
                         depth+1
-                    ))
+                    ])
+                    print(queue)
             if prediction == SubdivisionAction.END_TEXT:
                 ret[x:sx+x, y:sy+y, 0] = 255
             if prediction == SubdivisionAction.END_FIGURE:
@@ -122,7 +124,8 @@ class CustomGUIHandler(GUIHandler):
     def buttons(self):
         return [
             *super().buttons,
-            sg.Text(key='status')
+            sg.Text(key='status'),
+            sg.Text("vermelho=texto,verde=figura,azul=lixo")
         ]
 
 

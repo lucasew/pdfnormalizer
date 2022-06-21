@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from matplotlib import pyplot as plt
+from pdfnormalizer.model import SubdivisionAction
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
 from sklearn.metrics import classification_report
@@ -26,11 +27,16 @@ conn = sqlite3.connect(str(args.d))
 df = pd.read_sql("select * from datapoints", con=conn)
 print(df)
 
-df['classification_idx'] = pd.Categorical(df['classification'])
-labels = list(df.classification_idx.cat.categories)
-print(labels)
-df['classification_idx'] = df.classification_idx.cat.codes
-print(labels, df['classification_idx'].max(), df['classification_idx'].min())
+df['classification_idx'] = list(map(
+    lambda v: SubdivisionAction[v.replace("SubdivisionAction.", "")].value - 1,
+    df['classification']
+))
+labels = list(map(
+    lambda v: SubdivisionAction[v.replace("SubdivisionAction.", "")].name,
+    list(df['classification'].unique())
+))
+
+print("labels", labels)
 df['norm_depth'] = df['depth'] / 20
 
 NUM_CLASSES = len(labels)
