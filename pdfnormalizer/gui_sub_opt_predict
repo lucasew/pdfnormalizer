@@ -43,12 +43,15 @@ class CustomGUIHandler(GUIHandler):
         ret[:, :, :] = 0
         prepared = prepare_page_for_subdivision(img)
         queue = []
+        visited = {}
         self.current_element = None
         queue.append((*trim_whitespace(prepared), 1))
         while len(queue) > 0:
             print("loop")
             (x, y, sx, sy, depth) = queue.pop()
             print(x, y, sx, sy, depth)
+            if depth > 20:
+                continue
             cls = self.model.predict(np.array([[
                 depth/20,
                 x / w,
@@ -58,6 +61,8 @@ class CustomGUIHandler(GUIHandler):
             ]]))
             prediction = SubdivisionAction(int(tf.argmax(cls.T)[0])+1)
             print("prediction", prediction)
+            if (x, y, sx, sy) in visited:
+                continue
             if prediction == SubdivisionAction.HORIZONTAL:
                 bbx = get_bounding_boxes(
                     prepared,
@@ -107,6 +112,8 @@ class CustomGUIHandler(GUIHandler):
                 ret[x:sx+x, y:sy+y, 1] = 50 + depth*10
             if prediction == SubdivisionAction.END_THRASH:
                 ret[x:sx+x, y:sy+y, 2] = 50 + depth*10
+            if prediction not in [SubdivisionAction.VERTICAL, SubdivisionAction.HORIZONTAL]:
+                visited[x, y, sx, sy] = True
             print(prediction)
             print(cls)
         print("fimloop")
