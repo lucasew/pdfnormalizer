@@ -1,5 +1,5 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i python -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.opencv4 python3Packages.screeninfo
+#! nix-shell -i python -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.opencv4 python3Packages.screeninfo python3Packages.matplotlib
 # vim:ft=python
 
 from argparse import ArgumentParser
@@ -8,12 +8,16 @@ from pathlib import Path
 import PySimpleGUI as sg
 import numpy as np
 import cv2
+from matplotlib import pyplot as plt
 from screeninfo import get_monitors, Enumerator
 from pdfnormalizer.utils import array_to_data, GUI, GUIHandler
 from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes
 
+
 def all_line_is_color(line, color):
     return np.alltrue(line == color)
+
+
 class CustomGUIHandler(GUIHandler):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -23,6 +27,7 @@ class CustomGUIHandler(GUIHandler):
         self.black_emptyspace = True
         self.only_last_level = False
         self.max_depth = 1
+
     def frame_transform(self, img):
         img_copy = img.copy()
         out = img.copy()
@@ -30,17 +35,21 @@ class CustomGUIHandler(GUIHandler):
         print(w, h, _)
         prepared = prepare_page_for_subdivision(out)
         print(prepared.shape)
-        bbs = [*get_bounding_boxes(prepared)]
-        bbs.sort(key = lambda x: -x.depth)
+        bbs = get_bounding_boxes(prepared)
+        bbs.sort(key=lambda x: -x.depth)
         print(bbs)
         for bb in bbs:
+            print("prepared")
             x = int(bb.x * w)
             y = int(bb.y * h)
             sx = int((bb.x + bb.sx) * w)
             sy = int((bb.y + bb.sy) * h)
             print(bb, (x, y, sx, sy))
             img_copy = cv2.rectangle(img_copy, (y, x), (sy, sx), (255 - (5*bb.depth), 0, 0), 2)
-        return img_copy
+        print(img_copy)
+        # plt.imshow(img_copy)
+        # plt.show()
+        return img_copy, out
     # def handle_tx_up(self, gui, value):
     #     if self.tx < 1:
     #         self.tx += 0.01
@@ -75,30 +84,31 @@ class CustomGUIHandler(GUIHandler):
     #     self.black_emptyspace = not self.black_emptyspace
     #     gui.emit('tick')
 
-
     def handle_tick(self, gui, value):
         super().handle_tick(gui, value)
-        gui.window['status'].update(value = f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
+        gui.window['status'].update(value=f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
+
     @property
     def buttons(self):
         return [
             *super().buttons,
-            sg.Button('tx-', key = 'tx_down'),
-            sg.Button('tx+', key = 'tx_up'),
-            sg.Button('ty-', key = 'ty_down'),
-            sg.Button('ty+', key = 'ty_up'),
-            sg.Button('tg', key = 'toggle_view'),
-            sg.Button('tbe', key = 'toggle_black_emptyspace'),
-            sg.Button('oll', key = 'toggle_only_last_level'),
-            sg.Button('d+', key = 'max_depth_up'),
-            sg.Button('d-', key = 'max_depth_down'),
-            sg.Text(key = 'status')
+            sg.Button('tx-', key='tx_down'),
+            sg.Button('tx+', key='tx_up'),
+            sg.Button('ty-', key='ty_down'),
+            sg.Button('ty+', key='ty_up'),
+            sg.Button('tg', key='toggle_view'),
+            sg.Button('tbe', key='toggle_black_emptyspace'),
+            sg.Button('oll', key='toggle_only_last_level'),
+            sg.Button('d+', key='max_depth_up'),
+            sg.Button('d-', key='max_depth_down'),
+            sg.Text(key='status')
         ]
 
+
 parser = ArgumentParser()
-parser.add_argument('-i', type = Path, help = "PDF file to process", required = True)
-parser.add_argument('-z', type = float, help = "zoom scale", default = 1)
-parser.add_argument('-n', type = int, help = "start at page", default = 1)
+parser.add_argument('-i', type=Path, help="PDF file to process", required=True)
+parser.add_argument('-z', type=float, help="zoom scale", default=1)
+parser.add_argument('-n', type=int, help="start at page", default=1)
 args = parser.parse_args()
 
 scale = args.z
@@ -110,6 +120,6 @@ qt_images = len(images)
 if page < 0 or page >= qt_images:
     raise Exception(f"Invalid page: {page + 1}")
 
-handler = CustomGUIHandler(page = page, scale = scale)
+handler = CustomGUIHandler(page=page, scale=scale)
 gui = GUI(images, handler)
 gui.run()

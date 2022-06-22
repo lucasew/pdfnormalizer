@@ -11,8 +11,11 @@ import cv2
 from screeninfo import get_monitors, Enumerator
 from pdfnormalizer.utils import array_to_data, GUI, GUIHandler
 
+
 def all_line_is_color(line, color):
     return np.alltrue(line == color)
+
+
 class CustomGUIHandler(GUIHandler):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -22,7 +25,8 @@ class CustomGUIHandler(GUIHandler):
         self.black_emptyspace = True
         self.only_last_level = False
         self.max_depth = 1
-    def subdivide(self, img, depthmap = None, depth = 1, bg_color = None, x = 0, y = 0, sx = None, sy = None, horizontal = False):
+
+    def subdivide(self, img, depthmap=None, depth=1, bg_color=None, x=0, y=0, sx=None, sy=None, horizontal=False):
         (w, h, *rest) = img.shape
         if sx is None or sy is None:
             sx = w
@@ -32,12 +36,12 @@ class CustomGUIHandler(GUIHandler):
         if sx == 0 or sy == 0:
             return depthmap
         if depthmap is None:
-            depthmap = np.zeros((w, h), dtype = np.uint8)
+            depthmap = np.zeros((w, h), dtype=np.uint8)
         if bg_color is None:
             bg_color = img[x, y]
         if all_line_is_color(np.reshape(img[x:x+sx, y:y+sy], (sx*sy)), bg_color):
             return depthmap
-        for i in range(y, y + sy): # cima pra baixo
+        for i in range(y, y + sy):  # cima pra baixo
             line = img[x:x+sx, i]
             if all_line_is_color(line, bg_color) and sy > 0:
                 if self.black_emptyspace:
@@ -46,7 +50,7 @@ class CustomGUIHandler(GUIHandler):
                 sy -= 1
                 continue
             break
-        for i in reversed(range(y - 1, y+sy)): # baixo pra cima
+        for i in reversed(range(y - 1, y+sy)):  # baixo pra cima
             line = img[x:x+sx, i]
             if all_line_is_color(line, bg_color) and sy > 0:
                 if self.black_emptyspace:
@@ -54,7 +58,7 @@ class CustomGUIHandler(GUIHandler):
                 sy -= 1
                 continue
             break
-        for i in range(x, x+sx): # esquerda pra direita
+        for i in range(x, x+sx):  # esquerda pra direita
             line = img[i, y:y+sy]
             if all_line_is_color(line, bg_color) and sx > 0:
                 if self.black_emptyspace:
@@ -63,7 +67,7 @@ class CustomGUIHandler(GUIHandler):
                 sx -= 1
                 continue
             break
-        for i in reversed(range(x - 1, x+sx)): # direita pra esquerda
+        for i in reversed(range(x - 1, x+sx)):  # direita pra esquerda
             line = img[i, y:y+sy]
             if all_line_is_color(line, bg_color) and sx > 0:
                 if self.black_emptyspace:
@@ -117,26 +121,26 @@ class CustomGUIHandler(GUIHandler):
                     return self.subdivide(
                         img,
                         depthmap,
-                        depth = depth + 1,
-                        bg_color = bg_color,
-                        x = x,
-                        y = y,
-                        sx = sx,
-                        sy = sy,
-                        horizontal = not horizontal
+                        depth=depth+1,
+                        bg_color=bg_color,
+                        x=x,
+                        y=y,
+                        sx=sx,
+                        sy=sy,
+                        horizontal=not horizontal
                     )
             else:
                 if biggest_gap < min_gap_y:
                     return self.subdivide(
                         img,
                         depthmap,
-                        depth = depth + 1,
-                        bg_color = bg_color,
-                        x = x,
-                        y = y,
-                        sx = sx,
-                        sy = sy,
-                        horizontal = not horizontal
+                        depth=depth+1,
+                        bg_color=bg_color,
+                        x=x,
+                        y=y,
+                        sx=sx,
+                        sy=sy,
+                        horizontal=not horizontal
                     )
             if biggest_gap <= 2:
                 return depthmap
@@ -176,26 +180,26 @@ class CustomGUIHandler(GUIHandler):
                 if not horizontal:
                     depthmap = self.subdivide(
                         img,
-                        depthmap = dmap,
-                        depth = depth + 1,
-                        bg_color = bg_color,
-                        x = x,
-                        y = a,
-                        sx = sx,
-                        sy = b - a,
-                        horizontal = not horizontal
+                        depthmap=dmap,
+                        depth=depth + 1,
+                        bg_color=bg_color,
+                        x=x,
+                        y=a,
+                        sx=sx,
+                        sy=b-a,
+                        horizontal=not horizontal
                     )
                 else:
                     depthmap = self.subdivide(
                         img,
-                        depthmap = dmap,
-                        depth = depth + 1,
-                        bg_color = bg_color,
-                        x = a,
-                        y = y,
-                        sx = b - a,
-                        sy = sy,
-                        horizontal = not horizontal
+                        depthmap=dmap,
+                        depth=depth+1,
+                        bg_color=bg_color,
+                        x=a,
+                        y=y,
+                        sx=b-a,
+                        sy=sy,
+                        horizontal=not horizontal
                     )
         return depthmap
 
@@ -213,35 +217,40 @@ class CustomGUIHandler(GUIHandler):
         mask = 255 - mask
         _, mask = cv2.threshold(mask, 250, 255, cv2.THRESH_BINARY)
         if not self.show_subdivision:
-            return mask
+            return mask, img
         else:
             subdivided = self.subdivide(mask)
             max_value = np.max(subdivided)
             print(max_value)
             subdivided = np.array(subdivided * (255 / max_value), np.uint8)
             print(np.max(subdivided))
-            return subdivided
+            return subdivided, img
 
     def handle_tx_up(self, gui, value):
         if self.tx < 1:
             self.tx += 0.01
             gui.emit('tick')
+
     def handle_tx_down(self, gui, value):
         if self.tx > 0:
             self.tx -= 0.001
             gui.emit('tick')
+
     def handle_ty_up(self, gui, value):
         if self.ty <= 1:
             self.ty += 0.01
             gui.emit('tick')
+
     def handle_ty_down(self, gui, value):
         if self.ty > 0:
             self.ty -= 0.001
             gui.emit('tick')
+
     def handle_max_depth_up(self, gui, value):
         if self.max_depth < 50:
             self.max_depth += 1
             gui.emit('tick')
+
     def handle_max_depth_down(self, gui, value):
         if self.max_depth > 1:
             self.max_depth -= 1
@@ -249,13 +258,16 @@ class CustomGUIHandler(GUIHandler):
 
     def handle_tick(self, gui, value):
         super().handle_tick(gui, value)
-        gui.window['status'].update(value = f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
+        gui.window['status'].update(value=f'tx: {self.tx:.4f} ty: {self.ty:.4f} d: {self.max_depth}')
+
     def handle_toggle_view(self, gui, value):
         self.show_subdivision = not self.show_subdivision
         gui.emit('tick')
+
     def handle_toggle_only_last_level(self, gui, value):
         self.only_last_level = not self.only_last_level
         gui.emit('tick')
+
     def handle_toggle_black_emptyspace(self, gui, value):
         self.black_emptyspace = not self.black_emptyspace
         gui.emit('tick')
@@ -264,22 +276,23 @@ class CustomGUIHandler(GUIHandler):
     def buttons(self):
         return [
             *super().buttons,
-            sg.Button('tx-', key = 'tx_down'),
-            sg.Button('tx+', key = 'tx_up'),
-            sg.Button('ty-', key = 'ty_down'),
-            sg.Button('ty+', key = 'ty_up'),
-            sg.Button('tg', key = 'toggle_view'),
-            sg.Button('tbe', key = 'toggle_black_emptyspace'),
-            sg.Button('oll', key = 'toggle_only_last_level'),
-            sg.Button('d+', key = 'max_depth_up'),
-            sg.Button('d-', key = 'max_depth_down'),
-            sg.Text(key = 'status')
+            sg.Button('tx-', key='tx_down'),
+            sg.Button('tx+', key='tx_up'),
+            sg.Button('ty-', key='ty_down'),
+            sg.Button('ty+', key='ty_up'),
+            sg.Button('tg', key='toggle_view'),
+            sg.Button('tbe', key='toggle_black_emptyspace'),
+            sg.Button('oll', key='toggle_only_last_level'),
+            sg.Button('d+', key='max_depth_up'),
+            sg.Button('d-', key='max_depth_down'),
+            sg.Text(key='status')
         ]
 
+
 parser = ArgumentParser()
-parser.add_argument('-i', type = Path, help = "PDF file to process", required = True)
-parser.add_argument('-z', type = float, help = "zoom scale", default = 1)
-parser.add_argument('-n', type = int, help = "start at page", default = 1)
+parser.add_argument('-i', type=Path, help="PDF file to process", required=True)
+parser.add_argument('-z', type=float, help="zoom scale", default=1)
+parser.add_argument('-n', type=int, help="start at page", default=1)
 args = parser.parse_args()
 
 scale = args.z
@@ -291,6 +304,6 @@ qt_images = len(images)
 if page < 0 or page >= qt_images:
     raise Exception(f"Invalid page: {page + 1}")
 
-handler = CustomGUIHandler(page = page, scale = scale)
+handler = CustomGUIHandler(page=page, scale=scale)
 gui = GUI(images, handler)
 gui.run()

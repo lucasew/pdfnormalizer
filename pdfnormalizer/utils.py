@@ -19,7 +19,7 @@ class GUIHandler():
         self.page = page
 
     def frame_transform(self, image):
-        return image
+        return image, image
 
     def handle_image_change(self, gui):
         (ww, wh) = gui.window.Size
