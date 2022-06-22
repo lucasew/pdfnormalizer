@@ -102,11 +102,11 @@ class CustomGUIHandler(GUIHandler):
                     ])
                     print(queue)
             if prediction == SubdivisionAction.END_TEXT:
-                ret[x:sx+x, y:sy+y, 0] = 255
+                ret[x:sx+x, y:sy+y, 0] = 50 + depth*10
             if prediction == SubdivisionAction.END_FIGURE:
-                ret[x:sx+x, y:sy+y, 1] = 255
+                ret[x:sx+x, y:sy+y, 1] = 50 + depth*10
             if prediction == SubdivisionAction.END_THRASH:
-                ret[x:sx+x, y:sy+y, 2] = 255
+                ret[x:sx+x, y:sy+y, 2] = 50 + depth*10
             print(prediction)
             print(cls)
         print("fimloop")
