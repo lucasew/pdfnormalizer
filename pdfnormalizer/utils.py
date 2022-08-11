@@ -3,6 +3,10 @@ import PySimpleGUI as sg
 import cv2
 
 
+def log(*args, **kwargs):
+    from sys import stderr
+    print(file=stderr, *args, **kwargs)
+
 def array_to_data(array):
     from PIL import Image
     from io import BytesIO
@@ -112,7 +116,7 @@ class GUI():
                 return False
         except AttributeError:
             pass
-        print("GUI event: ", event, handler is not None, values)
+        log("GUI event: ", event, handler is not None, values)
         return True
 
     def run(self):

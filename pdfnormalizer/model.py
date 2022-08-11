@@ -3,6 +3,8 @@ from enum import Enum, unique
 
 import numpy as np
 
+from pdfnormalizer.utils import log
+
 
 @dataclass(frozen=True)
 class Element():
@@ -120,7 +122,7 @@ def get_bounding_boxes(
     if all_line_is_color(np.reshape(img[x:x+sx, y:y+sy], (sx*sy)), bg_color):
         return []
     (x, y, sx, sy) = trim_whitespace(img, sx=sx, sy=sy, x=x, y=y, bg_color=bg_color)
-    print('depth', depth, max_depth, 'unwhitespaced', x, y, sx, sy)
+    log('depth', depth, max_depth, 'unwhitespaced', x, y, sx, sy)
     if depth < max_depth:
         biggest_gap = 0
         current_gap = 0
@@ -128,7 +130,7 @@ def get_bounding_boxes(
             for i in range(y, y + sy):
                 line = img[x:x+sx, i]
                 if all_line_is_color(line, bg_color):
-                    # print('gap')
+                    # log('gap')
                     current_gap += 1
                     if current_gap > biggest_gap:
                         biggest_gap = current_gap

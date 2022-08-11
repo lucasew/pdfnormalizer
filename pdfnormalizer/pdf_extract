@@ -1,51 +1,141 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i python -p python3Packages.pdfminer
+#! nix-shell -i python -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.opencv4 python3Packages.screeninfo python3Packages.tensorflow python3Packages.keras python3Packages.matplotlib python3Packages.pytesseract python3Packages.tqdm
 # vim:ft=python
 
+from argparse import ArgumentParser
+from pdf2image import convert_from_path
 from pathlib import Path
-from typing import Iterable, Any
+from io import BytesIO
+import PySimpleGUI as sg
+import numpy as np
+import cv2
+import random
+from screeninfo import get_monitors, Enumerator
+from pdfnormalizer.utils import array_to_data, GUI, GUIHandler, log
+from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction, trim_whitespace
+import tensorflow as tf
+from PIL import Image
+from base64 import b64encode
+from tqdm import tqdm
 
-from pdfminer.high_level import extract_pages
-from sys import argv
+from matplotlib import pyplot as plt
 
+from pytesseract import image_to_string
 
-def show_ltitem_hierarchy(o: Any, depth=0):
-    """Show location and text of LTItem and all its descendants"""
-    if depth == 0:
-        print('element                        x1  y1  x2  y2   text')
-        print('------------------------------ --- --- --- ---- -----')
+parser = ArgumentParser()
+parser.add_argument('-i', type=Path, help="PDF file to process", required=True)
+parser.add_argument('-z', type=float, help="zoom scale", default=1)
+parser.add_argument('-n', type=int, help="start at page", default=1)
+parser.add_argument('-m', type=Path, help="model file (h5)", required=True)
 
-    print(
-        f'{get_indented_name(o, depth):<30.30s} '
-        f'{get_optional_bbox(o)} '
-        f'{get_optional_text(o)}'
-    )
+args = parser.parse_args()
 
-    if isinstance(o, Iterable):
-        for i in o:
-            show_ltitem_hierarchy(i, depth=depth + 1)
+scale = args.z
 
+images = convert_from_path(args.i)
+qt_images = len(images)
 
-def get_indented_name(o: Any, depth: int) -> str:
-    """Indented name of LTItem"""
-    return '  ' * depth + o.__class__.__name__
+model = tf.keras.models.load_model(args.m)
 
+def predict_page(img):
+    w, h, *rest = img.shape
+    img = img.copy()
+    prepared = prepare_page_for_subdivision(img)
+    queue = []
+    visited = {}
+    queue.append((*trim_whitespace(prepared), 1))
+    while len(queue) > 0:
+        (x, y, sx, sy, depth) = queue.pop()
+        # log(x, y, sx, sy, depth)
+        if depth > 20:
+            continue
+        cls = model.predict(np.array([[
+            depth/20,
+            x / w,
+            y / h,
+            sx / w,
+            sy / h
+        ]]))
+        prediction = SubdivisionAction(int(tf.argmax(cls.T)[0])+1)
+        if (x, y, sx, sy) in visited:
+            continue
+        if prediction == SubdivisionAction.HORIZONTAL:
+            bbx = get_bounding_boxes(
+                prepared,
+                depth=depth,
+                horizontal=True,
+                sx=sx,
+                sy=sy,
+                x=x,
+                y=y,
+                max_depth=depth+1
+            )
+            for it in bbx:
+                queue.append([
+                    int(it.x*w),
+                    int(it.y*h),
+                    int(it.sx*w),
+                    int(it.sy*h),
+                    depth+1
+                ])
+        if prediction == SubdivisionAction.VERTICAL:
+            bbx = get_bounding_boxes(
+                prepared,
+                depth=depth,
+                horizontal=False,
+                sx=sx,
+                sy=sy,
+                x=x,
+                y=y,
+                max_depth=depth+1
+            )
+            for it in bbx:
+                queue.append([
+                    int(it.x*w),
+                    int(it.y*h),
+                    int(it.sx*w),
+                    int(it.sy*h),
+                    depth+1
+                ])
+        if prediction == SubdivisionAction.END_TEXT:
+            yield ('text', x, sx, y, sy, depth)
+        if prediction == SubdivisionAction.END_FIGURE:
+            yield ('figure', x, sx, y, sy, depth)
+        if prediction == SubdivisionAction.END_THRASH:
+            pass # ignore, as it is trash
+        if prediction not in [SubdivisionAction.VERTICAL, SubdivisionAction.HORIZONTAL]:
+            visited[x, y, sx, sy] = True
 
-def get_optional_bbox(o: Any) -> str:
-    """Bounding box of LTItem if available, otherwise empty string"""
-    if hasattr(o, 'bbox'):
-        return ''.join(f'{i:<4.0f}' for i in o.bbox)
-    return ''
+print('''
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+    body {
+        max-width: 100vw;
+    }
+    body > * {
+        max-width: 100%;
+    }
+    </style>
+    <meta charset="UTF-8"/>
+</head>
+<body>
+''')
+for (i, image) in enumerate(tqdm(images)):
+    image = np.array(image)
+    # log(image)
+    print(f"<!-- Página {i} -->")
+    for (kind, x, sx, y, sy, depth) in predict_page(image):
+        log("prediction", kind, x, sx, y, sy, depth)
+        if kind == "text":
+            text = image_to_string(image[x:x+sx, y:y+sy])
+            print("<!-- Início do bloco de texto -->")
+            for line in text.split("\n"):
+                print(f"<p>{line}</p>")
+        elif kind == "figure":
+            roi = image[x:x+sx, y:y+sy]
+            b64 = b64encode(array_to_data(roi))
+            print(f"<img src=data:image/png;base64,{b64.decode('ascii')}>")
 
-
-def get_optional_text(o: Any) -> str:
-    """Text of LTItem if available, otherwise empty string"""
-    if hasattr(o, 'get_text'):
-        return o.get_text().strip()
-    return ''
-
-
-path = Path(argv[1]).expanduser()
-
-pages = extract_pages(path)
-show_ltitem_hierarchy(pages)
+print("</body></html>")
