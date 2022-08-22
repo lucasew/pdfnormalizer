@@ -1,1 +1,4 @@
+*.old
+*.h5
+*.db
 true
