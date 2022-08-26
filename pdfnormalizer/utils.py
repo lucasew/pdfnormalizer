@@ -1,7 +1,4 @@
 import numpy as np
-import PySimpleGUI as sg
-import cv2
-
 
 def log(*args, **kwargs):
     from sys import stderr
@@ -26,6 +23,7 @@ class GUIHandler():
         return image, image
 
     def handle_image_change(self, gui):
+        import cv2
         (ww, wh) = gui.window.Size
         img = gui.images[self.page]
         (h, w, *_) = img.shape
@@ -81,6 +79,7 @@ class GUIHandler():
 
     @property
     def buttons(self):
+        import PySimpleGUI as sg
         return [
             sg.Button("<", key='prev'),
             sg.Button("+", key='more_zoom'),
@@ -93,12 +92,14 @@ class GUIHandler():
 
 class GUI():
     def layout(self):
+        import PySimpleGUI as sg
         return [
             self.handler.buttons,
             [sg.Image(key='img'), sg.Image(key='img2')]
         ]
 
     def __init__(self, images=[], handler=GUIHandler()):
+        import PySimpleGUI as sg
         self.handler = handler
         self.images = list(map(np.array, images))
         self.window = sg.Window('window', self.layout(), resizable=True, finalize=True, element_justification='c')
