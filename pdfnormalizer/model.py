@@ -124,7 +124,7 @@ def get_bounding_boxes(
         log("threshold too low")
         return [Element(x=x/w, y=y/h, sx=sx/w, sy=sy/h, depth=depth)]
     (x, y, sx, sy) = trim_whitespace(img, sx=sx, sy=sy, x=x, y=y, bg_color=bg_color, line_threshold = background_threshold)
-    log('depth', depth, max_depth, 'unwhitespaced', x, y, sx, sy, 'threshold', background_threshold)
+    # log('depth', depth, max_depth, 'unwhitespaced', x, y, sx, sy, 'threshold', background_threshold)
     if depth < max_depth:
         biggest_gap = 0
         biggest_gap_idx = 0
