@@ -11,7 +11,7 @@ import numpy as np
 import cv2
 import random
 from screeninfo import get_monitors, Enumerator
-from pdfnormalizer.utils import array_to_data, GUI, GUIHandler, log
+from pdfnormalizer.utils import array_to_data, GUI, GUIHandler, log, Exporter
 from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction, trim_whitespace
 import tensorflow as tf
 from PIL import Image
@@ -106,36 +106,11 @@ def predict_page(img):
         if prediction not in [SubdivisionAction.VERTICAL, SubdivisionAction.HORIZONTAL]:
             visited[x, y, sx, sy] = True
 
-print('''
-<!DOCTYPE html>
-<html>
-<head>
-    <style>
-    body {
-        max-width: 100vw;
-    }
-    body > * {
-        max-width: 100%;
-    }
-    </style>
-    <meta charset="UTF-8"/>
-</head>
-<body>
-''')
+print(Exporter.pre())
 for (i, image) in enumerate(tqdm(images)):
     image = np.array(image)
     # log(image)
     print(f"<!-- Página {i} -->")
     for (kind, x, sx, y, sy, depth) in predict_page(image):
-        log("prediction", kind, x, sx, y, sy, depth)
-        if kind == "text":
-            text = image_to_string(image[x:x+sx, y:y+sy])
-            print("<!-- Início do bloco de texto -->")
-            for line in text.split("\n"):
-                print(f"<p>{line}</p>")
-        elif kind == "figure":
-            roi = image[x:x+sx, y:y+sy]
-            b64 = b64encode(array_to_data(roi))
-            print(f"<img src=data:image/png;base64,{b64.decode('ascii')}>")
-
-print("</body></html>")
+        print(Exporter.block(image, kind, x, sx, y, sy, depth))
+print(Exporter.pos())

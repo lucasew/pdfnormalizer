@@ -13,6 +13,42 @@ def array_to_data(array):
         data = output.getvalue()
     return data
 
+class Exporter:
+    @staticmethod
+    def pre():
+        return '''
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+    body {
+        max-width: 100vw;
+    }
+    body > * {
+        max-width: 100%;
+    }
+    </style>
+    <meta charset="UTF-8"/>
+</head>
+<body>
+'''
+    @staticmethod
+    def pos():
+        return "</body></html>"
+    @staticmethod
+    def block(img, kind, x, sx, y, sy, depth):
+        from pytesseract import image_to_string
+        ret = ""
+        roi = img[x:x+sx, y:y+sy]
+        if kind == "text":
+            ret += "<!-- Início do bloco de texto -->"
+            for line in image_to_string(roi).split("\n"):
+                if line != "":
+                    ret += f"<p>{line}</p>"
+        elif kind == "figure":
+            b64 = b64encode(array_to_data(roi))
+            ret += f"<img src=data:image/png;base64,{b64.decode('ascii')}>"
+        return ret
 
 class GUIHandler():
     def __init__(self, scale=1.0, page=0, **kwargs):
