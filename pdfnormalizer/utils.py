@@ -160,3 +160,53 @@ class GUI():
         while self.tick():
             pass
         self.window.close()
+
+class sigmoid_focal_crossentropy_loss():
+    def __init__(
+        self,
+        alpha = 0.25,
+        gamma = 0.,
+        from_logits: bool = False,
+    ):
+        import tensorflow as tf
+        if gamma and gamma < 0:
+            raise ValueError("Value of gamma should be greater than or equal to zero.")
+        self.gamma = tf.constant(gamma)
+        self.alpha = tf.constant(alpha)
+        self.from_logits = from_logits
+
+    def get_config(self):
+        return dict(alpha=float(self.alpha), gamma=float(self.gamma), from_logits=self.from_logits)
+
+    def __call__(self, y_true, y_pred):
+        import tensorflow as tf
+        from tensorflow.keras import backend as K
+        # y_true = tf.one_hot(y_true, NUM_CLASSES)[0]
+        # y_pred = tf.cast(y_pred)
+        # y_true = tf.cast(y_true, dtype=y_pred.dtype)
+
+        # Get the cross_entropy for each entry
+        ce = K.binary_crossentropy(y_true, y_pred, from_logits=self.from_logits)
+
+        # If logits are provided then convert the predictions into probabilities
+        if self.from_logits:
+            pred_prob = tf.sigmoid(y_pred)
+        else:
+            pred_prob = y_pred
+
+        p_t = (y_true * pred_prob) + ((1 - y_true) * (1 - pred_prob))
+        # alpha_factor = 1.0
+        # modulating_factor = 1.0
+
+        # if alpha:
+        alpha = tf.cast(self.alpha, dtype=y_true.dtype)
+        alpha_factor = y_true * alpha + (1 - y_true) * (1 - alpha)
+
+        # if gamma:
+        gamma = tf.cast(self.gamma, dtype=y_true.dtype)
+        modulating_factor = tf.pow((1.0 - p_t), gamma)
+
+        # compute the final loss and return
+        return tf.reduce_sum(alpha_factor * modulating_factor * ce, axis=-1)
+
+

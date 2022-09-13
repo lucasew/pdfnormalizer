@@ -32,10 +32,10 @@ class CustomGUIHandler(GUIHandler):
             return SubdivisionAction.UNDEFINED
         return sub
 
-    def write_subdivision_result(self, elem, page, result):
+    def write_subdivision_result(self, elem, page, result, splith=0.5, splitv=0.5):
         import sqlite3
         if self.dbfile is not None:
-            print("write_subdivision_result", elem, page, result)
+            print("write_subdivision_result", elem, page, splith, splitv, result)
             with sqlite3.connect(str(self.dbfile)) as db:
                 db.execute("""
                 create table if not exists datapoints (
@@ -45,20 +45,22 @@ class CustomGUIHandler(GUIHandler):
                     y float,
                     sx float,
                     sy float,
+                    splith float default 0.5,
+                    splitv float default 0.5,
                     classification text default 'SubdivisionAction.UNDEFINED',
                     unique (page, x, y, sx, sy)
                 )
                 """)
                 db.execute("""
                 insert into datapoints
-                    (page, depth, x, y, sx, sy, classification)
+                    (page, depth, x, y, sx, sy, splith, splitv, classification)
                 values
-                    (?, ?, ?, ?, ?, ?, ?)
-                on conflict do update set classification=?
-                """, (page, elem.depth, elem.x, elem.y, elem.sx, elem.sy, str(result), str(result)))
+                    (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict do update set classification=?, splith=?, splitv=?
+                """, (page, elem.depth, elem.x, elem.y, elem.sx, elem.sy, splith, splitv, str(result), str(result), splith, splitv))
                 db.commit()
 
-    def set_subdivision(self, elem, sub, replace=False):
+    def set_subdivision(self, elem, sub, splith=0.5, splitv=0.5, replace=False):
         # print("elemsh", self.elemsh, "elemsv", self.elemsv)
         print("subdivision: ", elem, sub)
         if self.known_elements.get(self.page) is None:
@@ -70,7 +72,7 @@ class CustomGUIHandler(GUIHandler):
             except KeyError:
                 pass
         else:
-            self.write_subdivision_result(elem, self.page, sub)
+            self.write_subdivision_result(elem, self.page, sub, splith=splith, splitv=splitv)
             if self.known_elements[self.page].get(k) is None or replace:
                 self.known_elements[self.page][k] = (elem, sub)
 
@@ -151,10 +153,16 @@ class CustomGUIHandler(GUIHandler):
             imgv = cv2.rectangle(imgv, (y, x), (sy, sx), (0, 255, 0), 2)
         print(bbh, bbv)
         return imgh, imgv
-
+    def get_splits(self):
+        splith = self.elemsh[0].sx/self.current_element.sx
+        splitv = self.elemsh[0].sy/self.current_element.sy
+        return splith, splitv
+    def set_current_subdivision(self, subdivision = SubdivisionAction.UNDEFINED):
+        splith, splitv = self.get_splits()
+        self.set_subdivision(self.current_element, subdivision, splith=splith, splitv=splitv, replace=True)
     def handle_selecth(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.HORIZONTAL, replace=True)
+            self.set_current_subdivision(SubdivisionAction.HORIZONTAL)
             if len(self.elemsh) > 0:
                 for elem in self.elemsh:
                     self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
@@ -163,7 +171,7 @@ class CustomGUIHandler(GUIHandler):
 
     def handle_selectv(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.VERTICAL, replace=True)
+            self.set_current_subdivision(SubdivisionAction.VERTICAL)
             if len(self.elemsv) > 0:
                 for elem in self.elemsv:
                     self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
@@ -172,19 +180,19 @@ class CustomGUIHandler(GUIHandler):
 
     def handle_eol_lixo(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.END_THRASH, replace=True)
+            self.set_current_subdivision(SubdivisionAction.END_THRASH)
             self.current_element = None
             gui.emit('tick')
 
     def handle_eol_text(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.END_TEXT, replace=True)
+            self.set_current_subdivision(SubdivisionAction.END_TEXT)
             self.current_element = None
             gui.emit('tick')
 
     def handle_eol_figura(self, gui, value):
         if self.current_element is not None:
-            self.set_subdivision(self.current_element, SubdivisionAction.END_FIGURE, replace=True)
+            self.set_current_subdivision(SubdivisionAction.END_FIGURE)
             self.current_element = None
             gui.emit('tick')
 

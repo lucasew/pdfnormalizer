@@ -10,7 +10,7 @@ import numpy as np
 import cv2
 import random
 from screeninfo import get_monitors, Enumerator
-from pdfnormalizer.utils import array_to_data, GUI, GUIHandler
+from pdfnormalizer.utils import array_to_data, GUI, GUIHandler, sigmoid_focal_crossentropy_loss
 from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction, trim_whitespace
 import tensorflow as tf
 
@@ -22,7 +22,9 @@ class CustomGUIHandler(GUIHandler):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.model = tf.keras.models.load_model(kwargs['model'])
+        self.model = tf.keras.models.load_model(kwargs['model'], custom_objects=dict(
+            sigmoid_focal_crossentropy_loss=sigmoid_focal_crossentropy_loss
+        ))
 
     def handle_page_change(self, gui):
         gui.emit('tick')
@@ -52,14 +54,40 @@ class CustomGUIHandler(GUIHandler):
             print(x, y, sx, sy, depth)
             if depth > 20:
                 continue
-            cls = self.model.predict(np.array([[
-                depth/20,
-                x / w,
-                y / h,
-                sx / w,
-                sy / h
-            ]]))
-            prediction = SubdivisionAction(int(tf.argmax(cls.T)[0])+1)
+            bbh = get_bounding_boxes(
+                prepared,
+                depth=depth,
+                horizontal=True,
+                sx=sx,
+                sy=sy,
+                x=x,
+                y=y,
+                max_depth=depth+1
+            )
+            bbv = get_bounding_boxes(
+                prepared,
+                depth=depth,
+                horizontal=False,
+                sx=sx,
+                sy=sy,
+                x=x,
+                y=y,
+                max_depth=depth+1
+            )
+            prediction = SubdivisionAction.END_THRASH
+            if len(bbh) == 2 and len(bbv) == 2:
+                cls = self.model.predict(np.array([[
+                    depth/20,
+                    x / w,
+                    y / h,
+                    sx / w,
+                    sy / h,
+                    bbh[0].sx/sx,
+                    bbv[0].sy/sy
+                ]]))
+                prediction = SubdivisionAction(int(tf.argmax(cls.T)[0])+1)
+            else:
+                print("Fim de linha encontrado")
             print("prediction", prediction)
             if (x, y, sx, sy) in visited:
                 continue
