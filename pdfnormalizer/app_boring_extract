@@ -1,8 +1,12 @@
 #!/usr/bin/env nix-shell
-#! nix-shell -i python -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.opencv4 python3Packages.screeninfo
+#! nix-shell -i python -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.opencv4 python3Packages.screeninfo python3Packages.tensorflow python3Packages.keras python3Packages.matplotlib python3Packages.pytesseract python3Packages.tqdm
 # vim:ft=python
 
+from pdfnormalizer.utils import array_to_data, GUI, GUIHandler, log, Exporter
+from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction, trim_whitespace
 from argparse import ArgumentParser
+import numpy as np
+
 from pdf2image import convert_from_path
 from pathlib import Path
 import PySimpleGUI as sg
@@ -10,15 +14,13 @@ import numpy as np
 import cv2
 import random
 from screeninfo import get_monitors, Enumerator
-from pdfnormalizer.utils import array_to_data, GUI, GUIHandler
-from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction, trim_whitespace
-
 
 class CustomGUIHandler(GUIHandler):
     current_element = None
     elemsh = []
     elemsv = []
     known_elements = {}
+    elem_ordering = {}
 
     def get_elem_key(self, elem):
         return (int(elem.x * 1000), int(elem.y * 1000), int(elem.sx * 1000), int(elem.sy * 1000))
@@ -27,61 +29,36 @@ class CustomGUIHandler(GUIHandler):
         if self.known_elements.get(self.page) is None:
             self.known_elements[self.page] = {}
         k = self.get_elem_key(elem)
+        if self.elem_ordering.get(self.page) is None:
+            self.elem_ordering[self.page] = [elem]
         elem, sub = self.known_elements[self.page].get(k)
         if sub is None:
             return SubdivisionAction.UNDEFINED
         return sub
 
-    def write_subdivision_result(self, elem, page, result, splith=0.5, splitv=0.5):
-        import sqlite3
-        if self.dbfile is not None:
-            print("write_subdivision_result", elem, page, splith, splitv, result)
-            with sqlite3.connect(str(self.dbfile)) as db:
-                db.execute("""
-                create table if not exists datapoints (
-                    page int,
-                    depth int,
-                    x float,
-                    y float,
-                    sx float,
-                    sy float,
-                    splith float default 0.5,
-                    splitv float default 0.5,
-                    classification text default 'SubdivisionAction.UNDEFINED',
-                    unique (page, x, y, sx, sy)
-                )
-                """)
-                db.execute("""
-                insert into datapoints
-                    (page, depth, x, y, sx, sy, splith, splitv, classification)
-                values
-                    (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on conflict do update set classification=?, splith=?, splitv=?
-                """, (page, elem.depth, elem.x, elem.y, elem.sx, elem.sy, splith, splitv, str(result), str(result), splith, splitv))
-                db.commit()
-
-    def set_subdivision(self, elem, sub, splith=0.5, splitv=0.5, replace=False):
+    def set_subdivision(self, elem, sub, replace=False):
         # print("elemsh", self.elemsh, "elemsv", self.elemsv)
-        print("subdivision: ", elem, sub)
+        # print("subdivision: ", elem, sub)
         if self.known_elements.get(self.page) is None:
             self.known_elements[self.page] = {}
         k = self.get_elem_key(elem)
+        if self.elem_ordering.get(self.page) is None:
+            self.elem_ordering[self.page] = [elem]
         if sub is None:
             try:
                 self.known_elements[self.page].pop(k)
             except KeyError:
                 pass
         else:
-            self.write_subdivision_result(elem, self.page, sub, splith=splith, splitv=splitv)
+            # self.write_subdivision_result(elem, self.page, sub)
             if self.known_elements[self.page].get(k) is None or replace:
                 self.known_elements[self.page][k] = (elem, sub)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.dbfile = kwargs['dbfile']
 
     def handle_page_change(self, gui):
-        print('current_element', self.current_element)
+        # log('current_element', self.current_element)
         gui.emit('tick')
 
     def handle_prev(self, gui, value):
@@ -93,7 +70,10 @@ class CustomGUIHandler(GUIHandler):
         self.handle_page_change(gui)
 
     def frame_transform(self, img):
+        # log(self.elem_ordering)
         w, h, *_ = img.shape
+        self.w = w
+        self.h = h
         prepared = prepare_page_for_subdivision(img)
         (x, y, sx, sy) = trim_whitespace(prepared,
             x=0,
@@ -103,18 +83,24 @@ class CustomGUIHandler(GUIHandler):
         )
         self.current_element = None
         self.set_subdivision(Element(x=x/w, y=y/h, sx=sx/w, sy=sy/h, depth=1), SubdivisionAction.UNDEFINED)
-        for (_, (elem, cls)) in self.known_elements[self.page].items():
+        found_undefined = False
+        # log("frame transform", self.elem_ordering[self.page])
+        for elem in self.elem_ordering[self.page]:
+            cls = self.get_subdivision(elem)
             if cls is SubdivisionAction.UNDEFINED:
+                # log(elem)
                 self.current_element = elem
+                found_undefined = True
                 break
-        print(self.current_element)
+        # assert found_undefined
+        # print(self.current_element)
         if self.current_element is None:
             return img
         imgh = img.copy()
         imgv = img.copy()
         # print(w, h, _)
         depth = self.current_element.depth
-        print(depth)
+        # print(depth)
         bbh = get_bounding_boxes(prepared,
             horizontal=True,
             depth=depth,
@@ -141,7 +127,7 @@ class CustomGUIHandler(GUIHandler):
             y = int(bb.y * h)
             sx = int((bb.x + bb.sx) * w)
             sy = int((bb.y + bb.sy) * h)
-            print(x, y, sx, sy)
+            # print(x, y, sx, sy)
             imgh = cv2.rectangle(imgh, (y, x), (sy, sx), (255, 0, 0), 2)
         for bb in bbv:
             # print('bbv', bb)
@@ -149,56 +135,64 @@ class CustomGUIHandler(GUIHandler):
             y = int(bb.y * h)
             sx = int((bb.x + bb.sx) * w)
             sy = int((bb.y + bb.sy) * h)
-            print(x, y, sx, sy)
+            # print(x, y, sx, sy)
             imgv = cv2.rectangle(imgv, (y, x), (sy, sx), (0, 255, 0), 2)
-        print(bbh, bbv)
+        # print(bbh, bbv)
         return imgh, imgv
-    def get_splits(self):
-        splith = self.elemsh[0].sx/self.current_element.sx
-        splitv = self.elemsh[0].sy/self.current_element.sy
-        return splith, splitv
-    def set_current_subdivision(self, subdivision = SubdivisionAction.UNDEFINED):
-        splith, splitv = self.get_splits()
-        self.set_subdivision(self.current_element, subdivision, splith=splith, splitv=splitv, replace=True)
+
+    def tuple_current_element(self):
+        if self.current_element is None:
+            return None
+        x = int(self.current_element.x * self.w)
+        y = int(self.current_element.y * self.h)
+        sx = int(self.current_element.sx * self.w)
+        sy = int(self.current_element.sy * self.h)
+        depth = self.current_element.depth
+        return (x, sx, y, sy, depth)
+
     def handle_selecth(self, gui, value):
         if self.current_element is not None:
-            self.set_current_subdivision(SubdivisionAction.HORIZONTAL)
-            if len(self.elemsh) > 0:
-                for elem in self.elemsh:
-                    self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
+            self.set_subdivision(self.current_element, SubdivisionAction.HORIZONTAL, replace=True)
+            current_element_idx = self.elem_ordering[self.page].index(self.current_element)
+            self.elem_ordering[self.page].remove(self.current_element)
+            for (i, elem) in enumerate(self.elemsh):
+                self.elem_ordering[self.page].insert(current_element_idx + i, elem)
+                self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
+            # log("ordering", self.elem_ordering)
             self.current_element = None
             gui.emit('tick')
 
     def handle_selectv(self, gui, value):
         if self.current_element is not None:
-            self.set_current_subdivision(SubdivisionAction.VERTICAL)
-            if len(self.elemsv) > 0:
-                for elem in self.elemsv:
-                    self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
+            self.set_subdivision(self.current_element, SubdivisionAction.VERTICAL, replace=True)
+            current_element_idx = self.elem_ordering[self.page].index(self.current_element)
+            self.elem_ordering[self.page].remove(self.current_element)
+            for (i, elem) in enumerate(self.elemsv):
+                self.elem_ordering[self.page].insert(current_element_idx + i, elem)
+                self.set_subdivision(elem, SubdivisionAction.UNDEFINED)
+            # log("ordering", self.elem_ordering)
             self.current_element = None
             gui.emit('tick')
 
     def handle_eol_lixo(self, gui, value):
         if self.current_element is not None:
-            self.set_current_subdivision(SubdivisionAction.END_THRASH)
+            self.set_subdivision(self.current_element, SubdivisionAction.END_THRASH, replace=True)
             self.current_element = None
             gui.emit('tick')
 
     def handle_eol_text(self, gui, value):
         if self.current_element is not None:
-            self.set_current_subdivision(SubdivisionAction.END_TEXT)
+            self.set_subdivision(self.current_element, SubdivisionAction.END_TEXT, replace=True)
+            # print(gui.images[self.page])
+            print(Exporter.block(gui.images[self.page], "text", *self.tuple_current_element()))
             self.current_element = None
             gui.emit('tick')
 
     def handle_eol_figura(self, gui, value):
         if self.current_element is not None:
-            self.set_current_subdivision(SubdivisionAction.END_FIGURE)
-            self.current_element = None
-            gui.emit('tick')
-
-    def handle_skip(self, gui, value):
-        if self.current_element is not None:
-            self.set_subdivision(self.current_element, None, replace=True)
+            self.set_subdivision(self.current_element, SubdivisionAction.END_FIGURE, replace=True)
+            # print(gui.images[self.page])
+            print(Exporter.block(gui.images[self.page], "figure", *self.tuple_current_element()))
             self.current_element = None
             gui.emit('tick')
 
@@ -217,7 +211,6 @@ class CustomGUIHandler(GUIHandler):
             sg.Button('texto', key='eol_text'),
             sg.Button('figura', key='eol_figura'),
             sg.Button('lixo', key='eol_lixo'),
-            sg.Button('skip', key='skip'),
             sg.Text(key='status')
         ]
 
@@ -226,7 +219,6 @@ parser = ArgumentParser()
 parser.add_argument('-i', type=Path, help="PDF file to process", required=True)
 parser.add_argument('-z', type=float, help="zoom scale", default=1)
 parser.add_argument('-n', type=int, help="start at page", default=1)
-parser.add_argument('-o', type=Path, help="sqlite file")
 args = parser.parse_args()
 
 scale = args.z
@@ -238,6 +230,8 @@ qt_images = len(images)
 if page < 0 or page >= qt_images:
     raise Exception(f"Invalid page: {page + 1}")
 
-handler = CustomGUIHandler(page=page, scale=scale, dbfile=args.o)
+handler = CustomGUIHandler(page=page, scale=scale)
 gui = GUI(images, handler)
+print(Exporter.pre())
 gui.run()
+print(Exporter.pos())

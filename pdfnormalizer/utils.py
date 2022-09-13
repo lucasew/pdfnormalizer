@@ -1,7 +1,4 @@
 import numpy as np
-import PySimpleGUI as sg
-import cv2
-
 
 def log(*args, **kwargs):
     from sys import stderr
@@ -16,6 +13,42 @@ def array_to_data(array):
         data = output.getvalue()
     return data
 
+class Exporter:
+    @staticmethod
+    def pre():
+        return '''
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+    body {
+        max-width: 100vw;
+    }
+    body > * {
+        max-width: 100%;
+    }
+    </style>
+    <meta charset="UTF-8"/>
+</head>
+<body>
+'''
+    @staticmethod
+    def pos():
+        return "</body></html>"
+    @staticmethod
+    def block(img, kind, x, sx, y, sy, depth):
+        from pytesseract import image_to_string
+        ret = ""
+        roi = img[x:x+sx, y:y+sy]
+        if kind == "text":
+            ret += "<!-- Início do bloco de texto -->"
+            for line in image_to_string(roi).split("\n"):
+                if line != "":
+                    ret += f"<p>{line}</p>"
+        elif kind == "figure":
+            b64 = b64encode(array_to_data(roi))
+            ret += f"<img src=data:image/png;base64,{b64.decode('ascii')}>"
+        return ret
 
 class GUIHandler():
     def __init__(self, scale=1.0, page=0, **kwargs):
@@ -26,6 +59,7 @@ class GUIHandler():
         return image, image
 
     def handle_image_change(self, gui):
+        import cv2
         (ww, wh) = gui.window.Size
         img = gui.images[self.page]
         (h, w, *_) = img.shape
@@ -81,6 +115,7 @@ class GUIHandler():
 
     @property
     def buttons(self):
+        import PySimpleGUI as sg
         return [
             sg.Button("<", key='prev'),
             sg.Button("+", key='more_zoom'),
@@ -93,12 +128,14 @@ class GUIHandler():
 
 class GUI():
     def layout(self):
+        import PySimpleGUI as sg
         return [
             self.handler.buttons,
             [sg.Image(key='img'), sg.Image(key='img2')]
         ]
 
     def __init__(self, images=[], handler=GUIHandler()):
+        import PySimpleGUI as sg
         self.handler = handler
         self.images = list(map(np.array, images))
         self.window = sg.Window('window', self.layout(), resizable=True, finalize=True, element_justification='c')
@@ -123,3 +160,53 @@ class GUI():
         while self.tick():
             pass
         self.window.close()
+
+class sigmoid_focal_crossentropy_loss():
+    def __init__(
+        self,
+        alpha = 0.25,
+        gamma = 0.,
+        from_logits: bool = False,
+    ):
+        import tensorflow as tf
+        if gamma and gamma < 0:
+            raise ValueError("Value of gamma should be greater than or equal to zero.")
+        self.gamma = tf.constant(gamma)
+        self.alpha = tf.constant(alpha)
+        self.from_logits = from_logits
+
+    def get_config(self):
+        return dict(alpha=float(self.alpha), gamma=float(self.gamma), from_logits=self.from_logits)
+
+    def __call__(self, y_true, y_pred):
+        import tensorflow as tf
+        from tensorflow.keras import backend as K
+        # y_true = tf.one_hot(y_true, NUM_CLASSES)[0]
+        # y_pred = tf.cast(y_pred)
+        # y_true = tf.cast(y_true, dtype=y_pred.dtype)
+
+        # Get the cross_entropy for each entry
+        ce = K.binary_crossentropy(y_true, y_pred, from_logits=self.from_logits)
+
+        # If logits are provided then convert the predictions into probabilities
+        if self.from_logits:
+            pred_prob = tf.sigmoid(y_pred)
+        else:
+            pred_prob = y_pred
+
+        p_t = (y_true * pred_prob) + ((1 - y_true) * (1 - pred_prob))
+        # alpha_factor = 1.0
+        # modulating_factor = 1.0
+
+        # if alpha:
+        alpha = tf.cast(self.alpha, dtype=y_true.dtype)
+        alpha_factor = y_true * alpha + (1 - y_true) * (1 - alpha)
+
+        # if gamma:
+        gamma = tf.cast(self.gamma, dtype=y_true.dtype)
+        modulating_factor = tf.pow((1.0 - p_t), gamma)
+
+        # compute the final loss and return
+        return tf.reduce_sum(alpha_factor * modulating_factor * ce, axis=-1)
+
+
