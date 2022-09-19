@@ -42,9 +42,9 @@ def predict_page(img):
     w, h, *rest = img.shape
     img = img.copy()
     prepared = prepare_page_for_subdivision(img)
-    queue = []
     visited = {}
-    queue.append((*trim_whitespace(prepared), 1))
+    queue = [(*trim_whitespace(prepared), 1)]
+    log(queue)
     while len(queue) > 0:
         (x, y, sx, sy, depth) = queue.pop()
         # log(x, y, sx, sy, depth)
@@ -86,22 +86,28 @@ def predict_page(img):
             prediction = SubdivisionAction(int(tf.argmax(cls.T)[0])+1)
         if prediction == SubdivisionAction.HORIZONTAL:
             for it in bbh:
-                queue.append([
-                    int(it.x*w),
-                    int(it.y*h),
-                    int(it.sx*w),
-                    int(it.sy*h),
-                    depth+1
-                ])
+                queue = [
+                    [
+                        int(it.x*w),
+                        int(it.y*h),
+                        int(it.sx*w),
+                        int(it.sy*h),
+                        depth+1
+                    ],
+                    *queue
+                ]
         if prediction == SubdivisionAction.VERTICAL:
             for it in bbv:
-                queue.append([
-                    int(it.x*w),
-                    int(it.y*h),
-                    int(it.sx*w),
-                    int(it.sy*h),
-                    depth+1
-                ])
+                queue = [
+                    [
+                        int(it.x*w),
+                        int(it.y*h),
+                        int(it.sx*w),
+                        int(it.sy*h),
+                        depth+1
+                    ],
+                    *queue
+                ]
         if prediction == SubdivisionAction.END_TEXT:
             yield ('text', x, sx, y, sy, depth)
         if prediction == SubdivisionAction.END_FIGURE:
