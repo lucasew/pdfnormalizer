@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def log(*args, **kwargs):
     from sys import stderr
     print(file=stderr, *args, **kwargs)
@@ -37,6 +38,7 @@ class Exporter:
         return "</body></html>"
     @staticmethod
     def block(img, kind, x, sx, y, sy, depth):
+        from base64 import b64encode
         from pytesseract import image_to_string
         ret = ""
         roi = img[x:x+sx, y:y+sy]
