@@ -8,6 +8,20 @@ from pdfnormalizer.utils import log
 
 @dataclass(frozen=True)
 class Element():
+    """
+    Represents a recognized rectangular region (bounding box) in the image.
+
+    Coordinates and dimensions are typically normalized (0.0 to 1.0) relative to the
+    parent image size to remain resolution-independent.
+
+    Attributes:
+        x: The horizontal starting coordinate (top-left).
+        y: The vertical starting coordinate (top-left).
+        sx: The width of the region (size x).
+        sy: The height of the region (size y).
+        depth: The recursion depth at which this element was discovered, useful for
+               tracking nested structures or forcing an early stop when parsing deeply.
+    """
     x: float
     y: float
     sx: float
@@ -17,6 +31,12 @@ class Element():
 
 @unique
 class SubdivisionAction(Enum):
+    """
+    Defines the layout classification or structural action to take on a bounding box.
+
+    Used by the predictive model to classify a region as an atomic unit (text/figure/trash)
+    or to signal that the region needs further splitting either horizontally or vertically.
+    """
     UNDEFINED = 0
     END_FIGURE = 1
     END_TEXT = 2
@@ -27,19 +47,40 @@ class SubdivisionAction(Enum):
 
 @unique
 class BoundingBoxHint(Enum):
-    PAGE_CONTAINER        = 1          # todo o conteúdo da página sem espaço em branco
-    SUP_CONTENT_BLOCK     = 2          # bloco que pega mais de um bloco de conteúdo, tipo as duas colunas de um artigo duas colunas
-    CONTENT_BLOCK         = 3          # bloco de conteúdo, tipo o bloco de autores de um artigo ou uma coluna de conteúdo
-    SUB_CONTENT_BLOCK     = 4          # um pedaço de um bloco de conteúdo mas que n chega a ser uma unidade de conteúdo
-    PICTURE_BLOCK         = 5          # um bloco de imagem
-    TEXT_BLOCK            = 6          # um bloco de texto
-    SUB_TEXT_BLOCK        = 7          # chega a comer um pedaço do texto ou dividir em mais de um
-    HEADER                = 8          # cabeçalho, geralmente remove
-    FOOTER                = 9          # rodapé, geralmente remove
-    END_OF_LINE           = 10         # elemento encontrado quando a recursão vai fundo demais
+    """
+    Semantic hints providing contextual classification for recognized blocks.
+
+    These hints categorize areas based on their expected document structure
+    (e.g., distinguishing between a full page wrapper and a specific text block).
+    """
+    PAGE_CONTAINER        = 1          # Full page content without surrounding whitespace
+    SUP_CONTENT_BLOCK     = 2          # A wrapper encompassing multiple logical blocks (e.g., a multi-column layout area)
+    CONTENT_BLOCK         = 3          # A distinct logical block, like an author list or a single text column
+    SUB_CONTENT_BLOCK     = 4          # A fragment of a content block that hasn't formed a full logical unit
+    PICTURE_BLOCK         = 5          # A figure or image region
+    TEXT_BLOCK            = 6          # A self-contained text area
+    SUB_TEXT_BLOCK        = 7          # A text fragment that potentially splits a text block
+    HEADER                = 8          # Page header, usually discarded during extraction
+    FOOTER                = 9          # Page footer, usually discarded during extraction
+    END_OF_LINE           = 10         # The terminal node when recursive subdivision hits the maximum depth
 
 
 def all_line_is_color(line, color, threshold = 0.999):
+    """
+    Evaluates if an image line (row or column) is overwhelmingly composed of a target color.
+
+    This acts as a heuristic to detect structural gaps (like whitespace or separators) by
+    calculating the ratio of pixels matching the provided background color.
+
+    Args:
+        line: A 1D numpy array representing a slice of the image.
+        color: The target background pixel value.
+        threshold: The required ratio (0.0 to 1.0) of target color to be considered a clear line.
+                   A lower threshold makes the check more tolerant to noise (e.g., scanning artifacts).
+
+    Returns:
+        True if the proportion of 'color' pixels strictly exceeds 'threshold', False otherwise.
+    """
     if line.shape[0] == 0:
         return True
     proportion = float(np.sum(line == color)) / line.shape[0]
@@ -47,6 +88,20 @@ def all_line_is_color(line, color, threshold = 0.999):
 
 
 def prepare_page_for_subdivision(img):
+    """
+    Transforms a raw document image into a high-contrast binary mask to simplify spatial analysis.
+
+    Assumes the very first pixel (top-left, [0, 0]) represents the overall document background.
+    It isolates this background using cv2.inRange and applies a strict threshold to binarize
+    the result. This uniform mask prevents variations in paper color or slight gradients
+    from disrupting subsequent whitespace-trimming or gap-detection logic.
+
+    Args:
+        img: A 3D numpy array representing the input image (width, height, channels).
+
+    Returns:
+        A 2D binary numpy array mask where content and background are rigidly separated.
+    """
     import cv2
     (w, h, channels) = img.shape
     background_color = img[0, 0]
@@ -62,6 +117,24 @@ def prepare_page_for_subdivision(img):
 
 
 def trim_whitespace(img, sx=None, sy=None, x=0, y=0, bg_color=None, line_threshold = 1):
+    """
+    Reduces the bounds of a given region by removing empty background margins from all four sides.
+
+    This function iterativelly shrinks the active bounding box (defined by x, y, sx, sy) inward
+    until it hits a structural boundary (a line that drops below the 'line_threshold' for bg_color).
+    It ensures that extraction or subsequent subdivision always operates tightly on actual content,
+    improving precision and discarding useless padding.
+
+    Args:
+        img: The image mask array to be processed.
+        sx, sy: Current width and height to process. Defaults to full image size.
+        x, y: Starting top-left coordinate. Defaults to (0, 0).
+        bg_color: The color treated as empty space. Derived from img[x, y] if omitted.
+        line_threshold: Tolerance for treating a line as empty (passed to all_line_is_color).
+
+    Returns:
+        A tuple (x, y, sx, sy) representing the tightest bounding box encompassing the content.
+    """
     if bg_color is None:
         bg_color = img[x, y]
     (w, h, *rest) = img.shape
@@ -109,6 +182,32 @@ def get_bounding_boxes(
         max_depth=20,       # profundidade máxima
         background_threshold=0.999
         ):
+    """
+    Recursively discovers sub-regions within an image block by scanning for the largest background gaps.
+
+    The algorithm performs a single subdivision pass on the given axis (horizontal or vertical).
+    It first tightly crops the region, then scans perpendicularly to find the widest contiguous
+    block of background color. If a significant gap is found, the region splits into two or more
+    sub-elements.
+
+    To handle noisy scans or subtle overlaps, the function dynamically lowers the `background_threshold`
+    and retries if the largest gap found is unexpectedly thin (<= 4 pixels wide). The recursion
+    deepens until 'max_depth' is reached or no further subdivisions can be established.
+
+    Args:
+        img: Mask array indicating content and layout.
+        bg_color: Target background pixel value; inferred dynamically if not provided.
+        depth: The current recursion index.
+        horizontal: Determines the scanning axis. If True, it splits the layout horizontally
+                    (scanning top-to-bottom or left-to-right depending on orientation logic).
+        sx, sy: Current bounding dimensions for the region.
+        x, y: Top-left coordinate anchoring the current region.
+        max_depth: A safety limit to prevent infinite recursion on highly granular images.
+        background_threshold: The purity ratio required to classify a scanned line as a gap.
+
+    Returns:
+        A list of `Element` objects, mapping normalized normalized coordinates and sizes.
+    """
     ret = []
     (w, h, *rest) = img.shape
     if sx is None or sy is None:
