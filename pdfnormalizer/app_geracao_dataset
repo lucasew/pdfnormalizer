@@ -69,9 +69,8 @@ class CustomGUIHandler(GUIHandler):
         if sub is None:
             try:
                 self.known_elements[self.page].pop(k)
-            except KeyError as e:
-                from pdfnormalizer.utils import report_error
-                report_error(e, f"KeyError popping known element {k} (often expected if element already popped)")
+            except KeyError:
+                pass
         else:
             self.write_subdivision_result(elem, self.page, sub, splith=splith, splitv=splitv)
             if self.known_elements[self.page].get(k) is None or replace:

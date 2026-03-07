@@ -5,15 +5,6 @@ def log(*args, **kwargs):
     from sys import stderr
     print(file=stderr, *args, **kwargs)
 
-def report_error(e, context=""):
-    """
-    Centralized error reporting function.
-    In the future, this should be wired to Sentry.
-    """
-    import traceback
-    log(f"ERROR: {context}")
-    log(traceback.format_exc())
-
 def array_to_data(array):
     from PIL import Image
     from io import BytesIO
@@ -162,8 +153,8 @@ class GUI():
             ret = handler(self, values)
             if ret is not None:
                 return False
-        except AttributeError as e:
-            report_error(e, f"AttributeError handling event {event} (often expected if no handler is defined)")
+        except AttributeError:
+            pass
         log("GUI event: ", event, handler is not None, values)
         return True
 
