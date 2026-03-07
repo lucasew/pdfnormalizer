@@ -154,7 +154,7 @@ class GUI():
             if ret is not None:
                 return False
         except AttributeError:
-            pass # Expected fallback, no handler found for this event
+            pass
         log("GUI event: ", event, handler is not None, values)
         return True
 
