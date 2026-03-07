@@ -163,8 +163,6 @@ class GUI():
             if ret is not None:
                 return False
         except AttributeError as e:
-            # Re-importing locally to avoid circular dependencies if utils is imported elsewhere early
-            from pdfnormalizer.utils import report_error
             report_error(e, f"AttributeError handling event {event} (often expected if no handler is defined)")
         log("GUI event: ", event, handler is not None, values)
         return True
