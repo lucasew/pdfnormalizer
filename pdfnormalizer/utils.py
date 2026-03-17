@@ -5,6 +5,22 @@ def log(*args, **kwargs):
     from sys import stderr
     print(file=stderr, *args, **kwargs)
 
+def report_error(error: Exception, context: str = ""):
+    """Centralized error reporting function.
+
+    Must be used in all except/catch blocks instead of silently passing
+    or directly printing errors. Hook to Sentry here if/when available.
+    """
+    import traceback
+    from sys import stderr
+
+    msg = f"ERROR: {error}"
+    if context:
+        msg = f"{context}: {msg}"
+
+    print(msg, file=stderr)
+    traceback.print_exception(type(error), error, error.__traceback__, file=stderr)
+
 def array_to_data(array):
     from PIL import Image
     from io import BytesIO
@@ -147,14 +163,14 @@ class GUI():
         self.window.write_event_value(name, value)
     def tick(self, timeout=None):
         event, values = self.window.read(timeout=timeout)
-        handler = None
-        try:
-            handler = self.handler.__getattribute__(f'handle_{event}')
-            ret = handler(self, values)
-            if ret is not None:
-                return False
-        except AttributeError:
-            pass
+        handler = getattr(self.handler, f'handle_{event}', None)
+        if handler is not None:
+            try:
+                ret = handler(self, values)
+                if ret is not None:
+                    return False
+            except Exception as e:
+                report_error(e, context=f"GUI tick handler failed for event: {event}")
         log("GUI event: ", event, handler is not None, values)
         return True
 

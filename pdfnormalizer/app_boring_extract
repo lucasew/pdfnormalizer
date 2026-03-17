@@ -45,10 +45,7 @@ class CustomGUIHandler(GUIHandler):
         if self.elem_ordering.get(self.page) is None:
             self.elem_ordering[self.page] = [elem]
         if sub is None:
-            try:
-                self.known_elements[self.page].pop(k)
-            except KeyError:
-                pass
+            self.known_elements[self.page].pop(k, None)
         else:
             # self.write_subdivision_result(elem, self.page, sub)
             if self.known_elements[self.page].get(k) is None or replace:

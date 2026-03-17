@@ -67,10 +67,7 @@ class CustomGUIHandler(GUIHandler):
             self.known_elements[self.page] = {}
         k = self.get_elem_key(elem)
         if sub is None:
-            try:
-                self.known_elements[self.page].pop(k)
-            except KeyError:
-                pass
+            self.known_elements[self.page].pop(k, None)
         else:
             self.write_subdivision_result(elem, self.page, sub, splith=splith, splitv=splitv)
             if self.known_elements[self.page].get(k) is None or replace:
