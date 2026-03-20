@@ -10,7 +10,7 @@
         shellHook = ''
           PS1="(pdfnormalizer) $PS1"
           PYTHONPATH=$PYTHONPATH:$(pwd)
-          PATH=$PATH:$(pwd)/pdfnormalizer
+          PATH=$PATH:$(pwd)/pdfnormalizer/apps:$(pwd)/pdfnormalizer/pocs:$(pwd)/pdfnormalizer
         '';
         buildInputs = with pkgs.python3Packages; [
           python
