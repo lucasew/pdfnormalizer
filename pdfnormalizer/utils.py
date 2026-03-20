@@ -14,6 +14,48 @@ def array_to_data(array):
         data = output.getvalue()
     return data
 
+def get_subdivided_images_and_boxes(img, current_element, prepared):
+    import cv2
+    from pdfnormalizer.model import get_bounding_boxes
+    w, h, *_ = img.shape
+    imgh = img.copy()
+    imgv = img.copy()
+    depth = current_element.depth
+
+    bbh = get_bounding_boxes(prepared,
+        horizontal=True,
+        depth=depth,
+        max_depth=depth+1,
+        sx=int(current_element.sx * w),
+        sy=int(current_element.sy * h),
+        x=int(current_element.x * w),
+        y=int(current_element.y * h)
+    )
+    elemsh = bbh
+    bbv = get_bounding_boxes(prepared,
+        horizontal=False,
+        depth=depth,
+        max_depth=depth+1,
+        sx=int(current_element.sx * w),
+        sy=int(current_element.sy * h),
+        x=int(current_element.x * w),
+        y=int(current_element.y * h)
+    )
+    elemsv = bbv
+    for bb in bbh:
+        x = int(bb.x * w)
+        y = int(bb.y * h)
+        sx = int((bb.x + bb.sx) * w)
+        sy = int((bb.y + bb.sy) * h)
+        imgh = cv2.rectangle(imgh, (y, x), (sy, sx), (255, 0, 0), 2)
+    for bb in bbv:
+        x = int(bb.x * w)
+        y = int(bb.y * h)
+        sx = int((bb.x + bb.sx) * w)
+        sy = int((bb.y + bb.sy) * h)
+        imgv = cv2.rectangle(imgv, (y, x), (sy, sx), (0, 255, 0), 2)
+    return imgh, imgv, elemsh, elemsv
+
 class Exporter:
     @staticmethod
     def pre():

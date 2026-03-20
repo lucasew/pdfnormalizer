@@ -2,7 +2,7 @@
 #! nix-shell -i python -p python3Packages.pdf2image python3Packages.pysimplegui python3Packages.opencv4 python3Packages.screeninfo python3Packages.tensorflow python3Packages.keras python3Packages.matplotlib python3Packages.pytesseract python3Packages.tqdm
 # vim:ft=python
 
-from pdfnormalizer.utils import array_to_data, GUI, GUIHandler, log, Exporter
+from pdfnormalizer.utils import array_to_data, GUI, GUIHandler, log, Exporter, get_subdivided_images_and_boxes
 from pdfnormalizer.model import Element, prepare_page_for_subdivision, get_bounding_boxes, SubdivisionAction, trim_whitespace
 from argparse import ArgumentParser
 import numpy as np
@@ -96,48 +96,11 @@ class CustomGUIHandler(GUIHandler):
         # print(self.current_element)
         if self.current_element is None:
             return img
-        imgh = img.copy()
-        imgv = img.copy()
-        # print(w, h, _)
-        depth = self.current_element.depth
-        # print(depth)
-        bbh = get_bounding_boxes(prepared,
-            horizontal=True,
-            depth=depth,
-            max_depth=depth+1,
-            sx=int(self.current_element.sx * w),
-            sy=int(self.current_element.sy * h),
-            x=int(self.current_element.x * w),
-            y=int(self.current_element.y * h)
+
+        imgh, imgv, self.elemsh, self.elemsv = get_subdivided_images_and_boxes(
+            img, self.current_element, prepared
         )
-        self.elemsh = bbh
-        bbv = get_bounding_boxes(prepared,
-            horizontal=False,
-            depth=depth,
-            max_depth=depth+1,
-            sx=int(self.current_element.sx * w),
-            sy=int(self.current_element.sy * h),
-            x=int(self.current_element.x * w),
-            y=int(self.current_element.y * h)
-        )
-        self.elemsv = bbv
-        for bb in bbh:
-            # print('bbh', bb)
-            x = int(bb.x * w)
-            y = int(bb.y * h)
-            sx = int((bb.x + bb.sx) * w)
-            sy = int((bb.y + bb.sy) * h)
-            # print(x, y, sx, sy)
-            imgh = cv2.rectangle(imgh, (y, x), (sy, sx), (255, 0, 0), 2)
-        for bb in bbv:
-            # print('bbv', bb)
-            x = int(bb.x * w)
-            y = int(bb.y * h)
-            sx = int((bb.x + bb.sx) * w)
-            sy = int((bb.y + bb.sy) * h)
-            # print(x, y, sx, sy)
-            imgv = cv2.rectangle(imgv, (y, x), (sy, sx), (0, 255, 0), 2)
-        # print(bbh, bbv)
+
         return imgh, imgv
 
     def tuple_current_element(self):

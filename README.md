@@ -9,11 +9,11 @@ There is (so far) a naive multiclass classifier that tries to map a bounding box
 This project is not made to generalize to every possible PDF shape or content pattern but can be used to train specialist models. The model architecture also is not the best cutting edge wonderful technology of unmatched precision, but works and converges.
 
 ## Components
-- `app_boring_extract`: Extracts stuff from a PDF, but using a more boring and precise approach.
-- `app_geracao_dataset`: Tool to ingest a PDF to build a training dataset.
-- `app_pdf_extract`: Extracts stuff from a PDF by using an already trained model.
-- `app_predicao`: Shows visually what the model sees in the page.
-- `app_trainer`: Trains by using the provided dataset and generates the model file
+- `apps/app_boring_extract`: Extracts stuff from a PDF, but using a more boring and precise approach.
+- `apps/app_geracao_dataset`: Tool to ingest a PDF to build a training dataset.
+- `apps/app_pdf_extract`: Extracts stuff from a PDF by using an already trained model.
+- `apps/app_predicao`: Shows visually what the model sees in the page.
+- `apps/app_trainer`: Trains by using the provided dataset and generates the model file
 - `db_clean_unnecessary.sql`: SQL query that must be run on the generated dataset file after using `app_geracao_dataset` and before training
 
 The other programs are parallel proof of concepts used as basis to implement the final tools and are here for experimentation and exploration purposes.
